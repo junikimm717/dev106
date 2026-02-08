@@ -33,11 +33,7 @@ func initEnvVars() error {
 		return errors.New("You need to set DEV_GID to some nonnegative integer!")
 	}
 	// I don't know why I have to do this for the scopes to work but ok
-	ok := false
-	CHOWN, ok = os.LookupEnv("DEV_CHOWN")
-	if !ok {
-		return errors.New("Env var DEV_CHOWN does not exist, skipping...")
-	}
+	CHOWN = os.Getenv("DEV_CHOWN")
 	CHOWNEXCLUDE = os.Getenv("DEV_CHOWNEXCLUDE")
 	return nil
 }
