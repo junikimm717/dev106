@@ -14,6 +14,8 @@ permission hiccups. `sudo` works automatically (provided you have a good image).
 
 ```bash
 $ cd {some_6106_assignment}
+# pull the image first
+$ dev106 pull
 # this will give you a shell into a running container. authorize-telerun will
 # save your telerun credentials and have it persist across containers.
 $ dev106
@@ -35,15 +37,16 @@ logout
 
 I'll hopefully get precompiled binaries up and running, but for now, just do
 ```bash
-go install github.com/junikimm717/dev106
+go install github.com/junikimm717/dev106@latest
 # run the binary, this should work if ~/go/bin is in your $PATH
 dev106
 ```
+
 If that program runs successfully, it should have generated a config at
 `~/.config/dev106/config.toml` (on your host machine).
 
 Go to `~/.config/dev106/config.toml` and change the name of the docker image to
-your image (by default it uses juni's neovim image).
+your image (by default it uses Juni's neovim image).
 
 ## Container Bootstrapper
 
