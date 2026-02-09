@@ -8,7 +8,7 @@ RUN go mod download
 COPY . .
 RUN CGO_ENABLED=0 go build ./cmd/bootstrap
 
-FROM debian:trixie-slim as mit_6106
+FROM debian:trixie-slim AS mit_6106
 
 RUN apt-get update && \
   apt-get install -y sudo git tar wget make perl ssh unzip xz-utils curl\
