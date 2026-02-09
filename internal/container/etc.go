@@ -40,7 +40,7 @@ func (e *EtcInfo) Clear(uid, gid int) {
 		}
 	}
 	for _, entry := range e.Group.Entries {
-		if entry.GID != uid && entry.Name != USERGROUPNAME {
+		if entry.GID != gid && entry.Name != USERGROUPNAME {
 			groupentries = append(groupentries, entry)
 		}
 	}

@@ -69,6 +69,13 @@ on (e.g. `/nvim:/dir/dir2`); the image authors should be responsible for this.
 chowning when doing the recursive chown operation. You should use this on
 massive artifact directories that don't actually need to be written to.
 
+In short, here is the flow of what happens when you launch a dev106 container:
+1. The CLI launches a dev106 container.
+2. The bootstrapper uses the env vars above to rewrite the owner UID and GID's
+   on the container filesystem
+3. The CLI starts a shell into the dev106 container with the same UID and GID as
+   the user.
+
 ## Image Sample
 
 Please reference this image when creating your own docker images.
