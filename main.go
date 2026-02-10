@@ -16,11 +16,15 @@ type App struct {
 	Binds         []string
 }
 
-func newApp() (*App, error) {
+// Function that generates a new app. It contains an option for whether it is
+// strictly required that we are in some Git repository.
+func newApp(allowNoRoot bool) (*App, error) {
 	config, err := cli.LoadConfig()
 	if err != nil {
 		return nil, err
 	}
+	ctx := context.Background()
+	client := cli.NewClient(ctx)
 
 	wd, err := os.Getwd()
 	if err != nil {
@@ -29,19 +33,31 @@ func newApp() (*App, error) {
 
 	root, err := cli.FindRoot(wd)
 	if err != nil {
-		return nil, err
+		if allowNoRoot {
+			return &App{
+				Config: config,
+				Client: client,
+			}, nil
+		} else {
+			return nil, err
+		}
 	}
 
 	binds, err := cli.BindMounts(config, root)
 	if err != nil {
-		return nil, err
+		if allowNoRoot {
+			return &App{
+				Config: config,
+				Client: client,
+			}, nil
+		} else {
+			return nil, err
+		}
 	}
-
-	ctx := context.Background()
 
 	return &App{
 		Config:        config,
-		Client:        cli.NewClient(ctx),
+		Client:        client,
 		ContainerName: cli.ContainerName(root),
 		Binds:         binds,
 	}, nil
@@ -52,7 +68,7 @@ func main() {
 		Use:   "dev106",
 		Short: "dev106 container runtime",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			app, err := newApp()
+			app, err := newApp(false)
 			if err != nil {
 				return err
 			}

@@ -33,24 +33,6 @@ func NewClient(ctx context.Context) *DevClient {
 	}
 }
 
-func (d *DevClient) Pull(config *DevConfig) error {
-	// we always pull linux amd64 images because they're the only ones supported in 6.106
-	resp, err := d.client.ImagePull(d.ctx, config.Image, dockerClient.ImagePullOptions{
-		Platforms: []v1.Platform{
-			{
-				Architecture: "amd64",
-				OS:           "linux",
-			},
-		},
-	})
-	if err != nil {
-		return err
-	}
-	defer resp.Close()
-	_, err = io.Copy(os.Stdout, resp)
-	return err
-}
-
 func (d *DevClient) Run(config *DevConfig, containerName string, binds []string) error {
 	u, err := user.Current()
 	if err != nil {

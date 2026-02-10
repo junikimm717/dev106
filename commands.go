@@ -11,7 +11,7 @@ func pullCmd() *cobra.Command {
 		Use:   "pull",
 		Short: "Pull container image",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			app, err := newApp()
+			app, err := newApp(true)
 			if err != nil {
 				return err
 			}
@@ -25,7 +25,7 @@ func startCmd() *cobra.Command {
 		Use:   "start",
 		Short: "Start container",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			app, err := newApp()
+			app, err := newApp(false)
 			if err != nil {
 				return err
 			}
@@ -40,7 +40,7 @@ func killCmd() *cobra.Command {
 		Use:   "kill",
 		Short: "Kill and delete container",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			app, err := newApp()
+			app, err := newApp(false)
 			if err != nil {
 				return err
 			}
@@ -55,7 +55,7 @@ func restartCmd() *cobra.Command {
 		Use:   "restart",
 		Short: "Recreate container",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			app, err := newApp()
+			app, err := newApp(false)
 			if err != nil {
 				return err
 			}
@@ -76,7 +76,7 @@ func shellCmd() *cobra.Command {
 		Use:   "shell",
 		Short: "Open shell in container",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			app, err := newApp()
+			app, err := newApp(false)
 			if err != nil {
 				return err
 			}
