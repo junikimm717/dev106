@@ -12,7 +12,7 @@ FROM debian:trixie-slim AS mit_6106
 
 RUN apt-get update && \
   apt-get install -y sudo git tar wget make perl ssh unzip xz-utils curl\
-  libxext-dev libx11-dev clang linux-perf
+  libxext-dev libx11-dev clang linux-perf valgrind
 
 RUN echo "%dev106 ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/dev106 \
  && chmod 0440 /etc/sudoers.d/dev106
