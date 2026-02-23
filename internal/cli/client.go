@@ -122,11 +122,27 @@ func (d *DevClient) Exec(containerName string) error {
 
 	// terminal resizing
 	defer term.Restore(fd, oldState)
-	_ = resizeExecTTY(d.client, d.ctx, execResp.ID, fd)
+
 	resizeCh := make(chan os.Signal, 1)
 	signal.Notify(resizeCh, syscall.SIGWINCH)
+	defer signal.Stop(resizeCh)
 
-	go io.Copy(attachResp.Conn, os.Stdin)
+	// initial resize
+	_ = resizeExecTTY(d.client, d.ctx, execResp.ID, fd)
+
+	// dynamically handle window resizes
+	go func() {
+		for range resizeCh {
+			_ = resizeExecTTY(d.client, d.ctx, execResp.ID, fd)
+		}
+	}()
+
+	// pipe stdin → container
+	go func() {
+		_, _ = io.Copy(attachResp.Conn, os.Stdin)
+	}()
+
+	// pipe container → stdout
 	_, err = io.Copy(os.Stdout, attachResp.Reader)
 
 	return err
