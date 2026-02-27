@@ -1,5 +1,4 @@
 # Dev106
-
 6.106 development containers and configuration for neovim users.
 
 ## Features:
@@ -47,6 +46,9 @@ If that program runs successfully, it should have generated a config at
 
 Go to `~/.config/dev106/config.toml` and change the name of the docker image to
 your image (by default it uses Juni's neovim image).
+
+**Notice**: there are now two different tags, 4.0-rc1 and 2.1.0, which
+correspond to different versions of the cilk compiler.
 
 ## Container Bootstrapper
 

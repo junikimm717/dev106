@@ -12,6 +12,14 @@ jobs:
   build:
     runs-on: ubuntu-latest
 
+    strategy:
+      matrix:
+        include:
+          - version: "2.1.0"
+            student_rev: "96b68493ee65c11fdc3ca2564eebdc725b4dfb86"
+          - version: "4.0-rc1"
+            student_rev: "cafb755e3c78e828672ad0c26149bfa9dead4bcb"
+
     permissions:
       contents: read
       packages: write
@@ -20,7 +28,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up QEMU (safe even though we only build amd64)
+      - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
 
       - name: Set up Docker Buildx
@@ -33,7 +41,11 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and push mit_6106
+      ########################################
+      # mit_6106
+      ########################################
+
+      - name: Build and push mit_6106:${{ matrix.version }}
         uses: docker/build-push-action@v5
         with:
           context: .
@@ -41,15 +53,25 @@ jobs:
           target: mit_6106
           push: true
           platforms: linux/amd64
+          build-args: |
+            STUDENT_REV=${{ matrix.student_rev }}
           tags: |
-            ghcr.io/junikimm717/dev106/mit_6106:latest
+            ghcr.io/${{ env.OWNER }}/dev106/mit_6106:${{ matrix.version }}
+            ${{ matrix.version == '4.0-rc1' && format('ghcr.io/{0}/dev106/mit_6106:latest', env.OWNER) || '' }}
 
-      - name: Build and push nvim
+      ########################################
+      # nvim
+      ########################################
+
+      - name: Build and push nvim:${{ matrix.version }}
         uses: docker/build-push-action@v5
         with:
           context: .
           file: ./docker/Dockerfile
           push: true
           platforms: linux/amd64
+          build-args: |
+            STUDENT_REV=${{ matrix.student_rev }}
           tags: |
-            ghcr.io/junikimm717/dev106/nvim:latest
+            ghcr.io/${{ env.OWNER }}/dev106/nvim:${{ matrix.version }}
+            ${{ matrix.version == '4.0-rc1' && format('ghcr.io/{0}/dev106/nvim:latest', env.OWNER) || '' }}

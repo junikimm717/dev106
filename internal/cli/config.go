@@ -40,7 +40,7 @@ func configPath() (string, error) {
 func defaultConfigContents() string {
 	return `# dev106 configuration
 # Required:
-image = "ghcr.io/junikimm717/dev106/nvim"
+image = "ghcr.io/junikimm717/dev106/nvim:2.1.0"
 
 # Optional (defaults to true):
 telerun = true
