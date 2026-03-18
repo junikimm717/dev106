@@ -20,7 +20,7 @@ ARG STUDENT_REV
 
 RUN apt-get update && \
   apt-get install -y sudo git tar wget make perl ssh unzip xz-utils curl \
-  libxext-dev libx11-dev clang linux-perf valgrind
+  libxext-dev libx11-dev clang linux-perf valgrind python3-pip
 
 RUN echo "%dev106 ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/dev106 \
  && chmod 0440 /etc/sudoers.d/dev106
@@ -31,6 +31,8 @@ RUN mkdir /student_software && \
   curl -L https://github.com/6106-spring26/student_software/archive/${STUDENT_REV}.tar.gz \
   | tar -xz --strip-components=1 -C /student_software && \
   cd /student_software && ./install.sh
+
+RUN pip3 install SQLAlchemy==1.4.54 opentuner
 
 COPY --from=builder /workspace/bootstrap /bootstrap
 
