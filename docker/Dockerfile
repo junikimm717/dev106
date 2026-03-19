@@ -32,7 +32,7 @@ RUN mkdir /student_software && \
   | tar -xz --strip-components=1 -C /student_software && \
   cd /student_software && ./install.sh
 
-RUN pip3 install SQLAlchemy==1.4.54 opentuner
+RUN pip3 install --break-system-packages SQLAlchemy==1.4.54 opentuner
 
 COPY --from=builder /workspace/bootstrap /bootstrap
 
