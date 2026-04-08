@@ -83,6 +83,7 @@ func main() {
 	rootCmd.AddCommand(shellCmd())
 	rootCmd.AddCommand(killCmd())
 	rootCmd.AddCommand(restartCmd())
+	rootCmd.AddCommand(execCmd())
 
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Println(err)

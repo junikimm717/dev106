@@ -148,6 +148,54 @@ func (d *DevClient) Exec(containerName string) error {
 	return err
 }
 
+func (d *DevClient) ExecCmd(containerName string, cmd []string) error {
+	u, err := user.Current()
+	if err != nil {
+		return err
+	}
+
+	userSpec := fmt.Sprintf("%s:%s", u.Uid, u.Gid)
+
+	execResp, err := d.client.ExecCreate(
+		d.ctx,
+		containerName,
+		dockerClient.ExecCreateOptions{
+			User:         userSpec,
+			Cmd:          cmd,
+			AttachStdout: true,
+			AttachStderr: true,
+		},
+	)
+	if err != nil {
+		return err
+	}
+
+	attachResp, err := d.client.ExecAttach(
+		d.ctx,
+		execResp.ID,
+		dockerClient.ExecAttachOptions{},
+	)
+	if err != nil {
+		return err
+	}
+	defer attachResp.Close()
+
+	_, err = io.Copy(os.Stdout, attachResp.Reader)
+	if err != nil {
+		return err
+	}
+
+	inspectResp, err := d.client.ExecInspect(d.ctx, execResp.ID, dockerClient.ExecInspectOptions{})
+	if err != nil {
+		return err
+	}
+	if inspectResp.ExitCode != 0 {
+		return fmt.Errorf("command exited with status %d", inspectResp.ExitCode)
+	}
+
+	return nil
+}
+
 func (d *DevClient) Delete(containerName string) error {
 	_, err := d.client.ContainerRemove(
 		d.ctx,

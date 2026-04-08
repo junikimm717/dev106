@@ -71,6 +71,34 @@ func restartCmd() *cobra.Command {
 	}
 }
 
+func execCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "exec [command] [args...]",
+		Short: "Execute a command in the container",
+		Args:  cobra.MinimumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			app, err := newApp(false)
+			if err != nil {
+				return err
+			}
+
+			exists, err := app.Client.ContainerExists(app.ContainerName)
+			if err != nil {
+				return err
+			}
+
+			if !exists {
+				fmt.Printf("Starting new container %s\n", app.ContainerName)
+				if err := app.Client.Run(app.Config, app.ContainerName, app.Binds); err != nil {
+					return err
+				}
+			}
+
+			return app.Client.ExecCmd(app.ContainerName, args)
+		},
+	}
+}
+
 func shellCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "shell",
