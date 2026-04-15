@@ -15,12 +15,19 @@ RUN CGO_ENABLED=0 go build ./cmd/bootstrap
 
 FROM debian:trixie-slim AS mit_6106
 
-# 👇 Add this line
 ARG STUDENT_REV
 
 RUN apt-get update && \
   apt-get install -y sudo git tar wget make perl ssh unzip xz-utils curl \
-  libxext-dev libx11-dev clang linux-perf valgrind python3-pip
+  libxext-dev libx11-dev clang linux-perf valgrind python3-pip \
+  openjdk-8-jre \
+  openjdk-8-jdk \
+  python3 \
+  python3-dev \
+  python3-pip \
+  python3-setuptools \
+  python3-wheel \
+  tcl
 
 RUN echo "%dev106 ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/dev106 \
  && chmod 0440 /etc/sudoers.d/dev106
