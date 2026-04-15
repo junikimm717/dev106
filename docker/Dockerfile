@@ -17,17 +17,26 @@ FROM debian:trixie-slim AS mit_6106
 
 ARG STUDENT_REV
 
+ARG TEMURIN8_URL="https://api.adoptium.net/v3/binary/latest/8/ga/linux/x64/jdk/hotspot/normal/eclipse"
+
 RUN apt-get update && \
-  apt-get install -y sudo git tar wget make perl ssh unzip xz-utils curl \
-  libxext-dev libx11-dev clang linux-perf valgrind python3-pip \
-  openjdk-8-jre \
-  openjdk-8-jdk \
+  apt-get install -y --no-install-recommends \
+  sudo git tar wget make perl ssh unzip xz-utils curl ca-certificates \
+  libxext-dev libx11-dev clang linux-perf valgrind \
   python3 \
   python3-dev \
   python3-pip \
   python3-setuptools \
   python3-wheel \
-  tcl
+  tcl && \
+  rm -rf /var/lib/apt/lists/*
+
+RUN mkdir -p /opt/java/openjdk8 && \
+  curl -fsSL "$TEMURIN8_URL" -o /tmp/openjdk8.tar.gz && \
+  tar -xzf /tmp/openjdk8.tar.gz --strip-components=1 -C /opt/java/openjdk8 && \
+  rm /tmp/openjdk8.tar.gz && \
+  ln -s /opt/java/openjdk8/bin/java /usr/bin/java && \
+  ln -s /opt/java/openjdk8/bin/javac /usr/bin/javac
 
 RUN echo "%dev106 ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/dev106 \
  && chmod 0440 /etc/sudoers.d/dev106
