@@ -34,9 +34,10 @@ RUN apt-get update && \
 RUN mkdir -p /opt/java/openjdk8 && \
   curl -fsSL "$TEMURIN8_URL" -o /tmp/openjdk8.tar.gz && \
   tar -xzf /tmp/openjdk8.tar.gz --strip-components=1 -C /opt/java/openjdk8 && \
-  rm /tmp/openjdk8.tar.gz && \
-  ln -s /opt/java/openjdk8/bin/java /usr/bin/java && \
-  ln -s /opt/java/openjdk8/bin/javac /usr/bin/javac
+  rm /tmp/openjdk8.tar.gz
+
+ENV JAVA_HOME=/opt/java/openjdk8
+ENV PATH="${JAVA_HOME}/bin:${PATH}"
 
 RUN echo "%dev106 ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/dev106 \
  && chmod 0440 /etc/sudoers.d/dev106
