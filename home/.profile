@@ -15,3 +15,6 @@ export PATH=/opt/6106/opencilk/bin:$PATH
 export PATH=/nvim/build/bin:$PATH
 export PATH=$HOME/.local/bin:$PATH
 export PATH=$HOME/go/bin:$PATH
+if test -n "$JAVA_HOME"; then
+  export PATH=$JAVA_HOME/bin:$PATH
+fi
