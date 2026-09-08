@@ -57,10 +57,89 @@ ENTRYPOINT ["/bootstrap"]
 
 
 ##############################
-# Final nvim image
+# Final nvim image (6.106)
 ##############################
 
-FROM mit_6106
+FROM mit_6106 AS nvim
+
+RUN mkdir /nvim && \
+  curl -L https://github.com/junikimm717/nvim2025/archive/master.tar.gz \
+  | tar -xz --strip-components=1 -C /nvim
+
+RUN <<EOF cat > /nvim/lua/configs/init.lua
+---@type Config
+return {
+  mason = {},
+  lazy = require("themes.kanagawa"),
+  treesitter = {
+    "json",
+    "markdown",
+    "gitignore",
+    "gitcommit",
+    "c",
+    "cpp",
+    "make",
+    "python",
+    "bash",
+    "asm",
+  }
+}
+EOF
+
+RUN cd /nvim && make -j$(nproc)
+RUN /nvim/build/bin/setup-nvim
+
+COPY ./home /home/dev106
+
+ENV DEV_CHOWN="/nvim"
+ENV DEV_CHOWNEXCLUDE="/nvim/build/pkgs"
+
+WORKDIR /workspace
+
+
+##############################
+# Base mit_6181 image
+# RISC-V toolchain for 6.1810 / xv6
+# https://pdos.csail.mit.edu/6.1810/2026/tools.html
+##############################
+
+FROM debian:trixie-slim AS mit_6181
+
+# Course packages (Ubuntu 24 names) plus qemu-system-riscv (Debian
+# Trixie split RISC-V out of qemu-system-misc) and bc/perl (xv6 Makefile).
+RUN apt-get update && \
+  apt-get install -y --no-install-recommends \
+  sudo git tar wget make perl ssh unzip xz-utils curl ca-certificates \
+  build-essential \
+  gdb-multiarch \
+  qemu-system-misc \
+  qemu-system-riscv \
+  gcc-riscv64-linux-gnu \
+  binutils-riscv64-linux-gnu \
+  bc \
+  python3 && \
+  rm -rf /var/lib/apt/lists/*
+
+RUN echo "%dev106 ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/dev106 \
+ && chmod 0440 /etc/sudoers.d/dev106
+
+RUN ln -sfn python3 /usr/bin/python
+
+# Fail the build if the course-required tools are missing or too old.
+RUN qemu-system-riscv64 --version && \
+  riscv64-linux-gnu-gcc --version && \
+  gdb-multiarch --version
+
+COPY --from=builder /workspace/bootstrap /bootstrap
+
+ENTRYPOINT ["/bootstrap"]
+
+
+##############################
+# nvim image (6.1810)
+##############################
+
+FROM mit_6181 AS nvim_6181
 
 RUN mkdir /nvim && \
   curl -L https://github.com/junikimm717/nvim2025/archive/master.tar.gz \

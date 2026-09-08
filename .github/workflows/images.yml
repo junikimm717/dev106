@@ -68,6 +68,7 @@ jobs:
         with:
           context: .
           file: ./docker/Dockerfile
+          target: nvim
           push: true
           platforms: linux/amd64
           build-args: |
@@ -75,3 +76,59 @@ jobs:
           tags: |
             ghcr.io/${{ env.OWNER }}/dev106/nvim:${{ matrix.version }}
             ${{ matrix.version == '4.0-rc1' && format('ghcr.io/{0}/dev106/nvim:latest', env.OWNER) || '' }}
+
+  build-6181:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      ########################################
+      # mit_6181
+      ########################################
+
+      - name: Build and push mit_6181
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./docker/Dockerfile
+          target: mit_6181
+          push: true
+          platforms: linux/amd64
+          tags: |
+            ghcr.io/${{ env.OWNER }}/dev106/mit_6181:latest
+            ghcr.io/${{ env.OWNER }}/dev106/mit_6181:2026
+
+      ########################################
+      # nvim_6181
+      ########################################
+
+      - name: Build and push nvim_6181
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./docker/Dockerfile
+          target: nvim_6181
+          push: true
+          platforms: linux/amd64
+          tags: |
+            ghcr.io/${{ env.OWNER }}/dev106/nvim_6181:latest
+            ghcr.io/${{ env.OWNER }}/dev106/nvim_6181:2026

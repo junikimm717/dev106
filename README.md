@@ -50,6 +50,10 @@ your image (by default it uses Juni's neovim image).
 **Notice**: there are now two different tags, 4.0-rc1 and 2.1.0, which
 correspond to different versions of the cilk compiler.
 
+For 6.1810 (xv6 / RISC-V), use `ghcr.io/junikimm717/dev106/mit_6181:latest`
+or `ghcr.io/junikimm717/dev106/nvim_6181:latest`. These images include
+QEMU 7.2+, gdb-multiarch, and `riscv64-linux-gnu` GCC/binutils.
+
 ## Container Bootstrapper
 
 **Important**: The home directory of the dev106 user is hard coded to be
