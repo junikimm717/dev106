@@ -13,7 +13,6 @@ import (
 	"github.com/containerd/errdefs"
 	"github.com/moby/moby/api/types/container"
 	dockerClient "github.com/moby/moby/client"
-	"github.com/opencontainers/image-spec/specs-go/v1"
 	"golang.org/x/term"
 )
 
@@ -38,6 +37,7 @@ func (d *DevClient) Run(config *DevConfig, containerName string, binds []string)
 	if err != nil {
 		return err
 	}
+	platform := config.linuxPlatform()
 	resp, err := d.client.ContainerCreate(d.ctx, dockerClient.ContainerCreateOptions{
 		Image: config.Image,
 		Name:  containerName,
@@ -47,10 +47,7 @@ func (d *DevClient) Run(config *DevConfig, containerName string, binds []string)
 				fmt.Sprintf("DEV_GID=%s", u.Gid),
 			},
 		},
-		Platform: &v1.Platform{
-			Architecture: "amd64",
-			OS:           "linux",
-		},
+		Platform: &platform,
 		HostConfig: &container.HostConfig{
 			Binds: binds,
 		},

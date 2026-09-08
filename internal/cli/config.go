@@ -5,15 +5,19 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
+	"strings"
 
 	"github.com/BurntSushi/toml"
 	"github.com/junikimm717/dev106/internal/shared"
 	"github.com/junikimm717/dev106/internal/tui"
+	"github.com/opencontainers/image-spec/specs-go/v1"
 )
 
 type DevConfig struct {
-	Telerun bool   `toml:"telerun"`
-	Image   string `toml:"image"`
+	Telerun    bool   `toml:"telerun"`
+	Image      string `toml:"image"`
+	FollowHost *bool  `toml:"follow_host"`
 }
 
 func configDir() (string, error) {
@@ -37,14 +41,36 @@ func configPath() (string, error) {
 	return filepath.Join(dir, "config.toml"), nil
 }
 
-func defaultConfigContents(image string) string {
+func defaultConfigContents(course courseOption) string {
 	return fmt.Sprintf(`# dev106 configuration
 # Required:
 image = %q
 
 # Optional (defaults to true):
 telerun = true
-`, image)
+
+# Use the host architecture instead of forcing linux/amd64.
+# Enabled by default for 6.181; disabled for 6.106.
+follow_host = %t
+`, course.Image, course.FollowHost)
+}
+
+func (c *DevConfig) followHost() bool {
+	if c.FollowHost != nil {
+		return *c.FollowHost
+	}
+	return strings.Contains(c.Image, "6181")
+}
+
+func (c *DevConfig) linuxPlatform() v1.Platform {
+	arch := "amd64"
+	if c.followHost() {
+		arch = runtime.GOARCH
+	}
+	return v1.Platform{
+		OS:           "linux",
+		Architecture: arch,
+	}
 }
 
 func LoadConfig() (*DevConfig, error) {
@@ -66,7 +92,7 @@ func LoadConfig() (*DevConfig, error) {
 			return nil, err
 		}
 
-		if err := os.WriteFile(path, []byte(defaultConfigContents(course.Image)), 0644); err != nil {
+		if err := os.WriteFile(path, []byte(defaultConfigContents(course)), 0644); err != nil {
 			return nil, err
 		}
 

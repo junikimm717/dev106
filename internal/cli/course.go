@@ -7,21 +7,24 @@ import (
 )
 
 type courseOption struct {
-	Name  string
-	Label string
-	Image string
+	Name       string
+	Label      string
+	Image      string
+	FollowHost bool
 }
 
 var courseOptions = []courseOption{
 	{
-		Name:  "6.181",
-		Label: "6.181  Operating System Engineering (xv6 / RISC-V)",
-		Image: "ghcr.io/junikimm717/dev106/nvim_6181:latest",
+		Name:       "6.181",
+		Label:      "6.181  Operating System Engineering (xv6 / RISC-V)",
+		Image:      "ghcr.io/junikimm717/dev106/nvim_6181:latest",
+		FollowHost: true,
 	},
 	{
-		Name:  "6.106",
-		Label: "6.106  Software Performance Engineering",
-		Image: "ghcr.io/junikimm717/dev106/nvim:2.1.0",
+		Name:       "6.106",
+		Label:      "6.106  Software Performance Engineering",
+		Image:      "ghcr.io/junikimm717/dev106/nvim:2.1.0",
+		FollowHost: false,
 	},
 }
 

@@ -21,9 +21,7 @@ func (d *DevClient) Pull(config *DevConfig) error {
 		d.ctx,
 		config.Image,
 		dockerClient.ImagePullOptions{
-			Platforms: []v1.Platform{
-				{OS: "linux", Architecture: "amd64"},
-			},
+			Platforms: []v1.Platform{config.linuxPlatform()},
 		},
 	)
 	if err != nil {
