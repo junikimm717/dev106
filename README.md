@@ -34,7 +34,10 @@ logout
 
 ## Installation
 
-I'll hopefully get precompiled binaries up and running, but for now, just do
+Download a pre-release binary from the
+[nightly release](https://github.com/junikimm717/dev106/releases/tag/nightly),
+or install from source:
+
 ```bash
 go install github.com/junikimm717/dev106@latest
 # run the binary, this should work if ~/go/bin is in your $PATH

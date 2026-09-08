@@ -2,6 +2,8 @@ name: Build and Push Dev106 Images
 
 on:
   workflow_dispatch:
+  push:
+    branches: [master]
 
 env:
   REGISTRY: ghcr.io
@@ -9,7 +11,55 @@ env:
   IMAGE_BASE: dev106
 
 jobs:
+  binaries:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Build pre-release binaries
+        run: |
+          mkdir -p dist
+          for spec in darwin/amd64 darwin/arm64 linux/amd64 linux/arm64; do
+            os=${spec%/*}
+            arch=${spec#*/}
+            CGO_ENABLED=0 GOOS="$os" GOARCH="$arch" go build -trimpath -ldflags="-s -w" \
+              -o "dist/dev106-${os}-${arch}" .
+          done
+          cd dist && sha256sum * > checksums.txt
+
+      - name: Upload workflow artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dev106-binaries
+          path: dist/
+
+      - name: Publish GitHub pre-release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if gh release view nightly >/dev/null 2>&1; then
+            gh release delete nightly --yes --cleanup-tag
+          fi
+          gh release create nightly \
+            --prerelease \
+            --latest=false \
+            --target "${{ github.sha }}" \
+            --title "Nightly" \
+            --generate-notes \
+            dist/*
+
   build:
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
 
     strategy:
@@ -78,6 +128,7 @@ jobs:
             ${{ matrix.version == '4.0-rc1' && format('ghcr.io/{0}/dev106/nvim:latest', env.OWNER) || '' }}
 
   build-6181:
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
 
     permissions:
