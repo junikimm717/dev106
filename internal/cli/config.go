@@ -8,6 +8,7 @@ import (
 
 	"github.com/BurntSushi/toml"
 	"github.com/junikimm717/dev106/internal/shared"
+	"github.com/junikimm717/dev106/internal/tui"
 )
 
 type DevConfig struct {
@@ -36,15 +37,14 @@ func configPath() (string, error) {
 	return filepath.Join(dir, "config.toml"), nil
 }
 
-// TODO: update the default image!
-func defaultConfigContents() string {
-	return `# dev106 configuration
+func defaultConfigContents(image string) string {
+	return fmt.Sprintf(`# dev106 configuration
 # Required:
-image = "ghcr.io/junikimm717/dev106/nvim:2.1.0"
+image = %q
 
 # Optional (defaults to true):
 telerun = true
-`
+`, image)
 }
 
 func LoadConfig() (*DevConfig, error) {
@@ -61,11 +61,20 @@ func LoadConfig() (*DevConfig, error) {
 
 	// If missing → create + exit
 	if _, err := os.Stat(path); errors.Is(err, os.ErrNotExist) {
-		if err := os.WriteFile(path, []byte(defaultConfigContents()), 0644); err != nil {
+		course, err := resolveCourse()
+		if err != nil {
+			return nil, err
+		}
+
+		if err := os.WriteFile(path, []byte(defaultConfigContents(course.Image)), 0644); err != nil {
 			return nil, err
 		}
 
 		fmt.Printf("Created config at %s\n", path)
+		fmt.Printf("Using %s image %s\n", course.Name, course.Image)
+		if !tui.HasTTY() {
+			fmt.Println("No TTY available; defaulted to 6.181.")
+		}
 		fmt.Println("Please edit it and re-run dev106.")
 		os.Exit(0)
 	}
