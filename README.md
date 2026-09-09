@@ -1,5 +1,8 @@
 # Dev106
-6.106 development containers and configuration for neovim users.
+
+Development containers and configuration for classwork.
+
+Currently supporting 6.106 and 6.181
 
 ## Features:
 

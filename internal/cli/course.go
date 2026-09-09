@@ -18,15 +18,15 @@ type courseOption struct {
 var courseOptions = []courseOption{
 	{
 		Name:       "6.181",
-		Label:      "6.181  Operating System Engineering (xv6 / RISC-V)",
-		Image:      "ghcr.io/junikimm717/dev106/nvim_6181:latest",
+		Label:      "6.1810 Operating System Engineering",
+		Image:      "ghcr.io/junikimm717/dev106/mit_6181:latest",
 		FollowHost: true,
 		Telerun:    false,
 	},
 	{
 		Name:       "6.106",
-		Label:      "6.106  Software Performance Engineering",
-		Image:      "ghcr.io/junikimm717/dev106/nvim:2.1.0",
+		Label:      "6.1060 Software Performance Engineering",
+		Image:      "ghcr.io/junikimm717/dev106/mit_6106:2.1.0",
 		FollowHost: false,
 		Telerun:    true,
 	},
