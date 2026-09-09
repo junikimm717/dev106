@@ -39,14 +39,24 @@ func FindRoot(dir string) (string, error) {
 	}
 }
 
+func RootID(dir string) string {
+	sum := sha256.Sum256([]byte(dir))
+	return hex.EncodeToString(sum[:])[:12]
+}
+
 func ContainerName(dir string) (string, error) {
 	u, err := user.Current()
 	if err != nil {
 		return "", fmt.Errorf("could not determine current user: %w", err)
 	}
-	sum := sha256.Sum256([]byte(dir))
-	id := hex.EncodeToString(sum[:])[:12]
-	return fmt.Sprintf("%s_%s_%s", shared.CONTAINER_PREFIX, u.Username, id), nil
+	return fmt.Sprintf("%s_%s_%s", shared.CONTAINER_PREFIX, u.Username, RootID(dir)), nil
+}
+
+func ContainerLabels(root string) map[string]string {
+	return map[string]string{
+		shared.LabelManaged: "true",
+		shared.LabelRoot:    root,
+	}
 }
 
 // compute the bind mounts that we'll need for a container.

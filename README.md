@@ -24,8 +24,10 @@ dev106@64bf911d7f23:/workspace$
 logout
 
 $ dev106 exec make -j4
+$ dev106 list
 $ dev106 kill
 $ dev106 restart
+$ dev106 nuke
 ```
 
 ## Installation

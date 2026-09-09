@@ -14,6 +14,7 @@ type App struct {
 	Config        *cli.DevConfig
 	Client        *cli.DevClient
 	ContainerName string
+	Root          string
 	Binds         []string
 }
 
@@ -69,6 +70,7 @@ func newApp(allowNoRoot bool) (*App, error) {
 		Config:        config,
 		Client:        client,
 		ContainerName: name,
+		Root:          root,
 		Binds:         binds,
 	}, nil
 }
@@ -95,6 +97,8 @@ func main() {
 	rootCmd.AddCommand(killCmd())
 	rootCmd.AddCommand(restartCmd())
 	rootCmd.AddCommand(execCmd())
+	rootCmd.AddCommand(listCmd())
+	rootCmd.AddCommand(nukeCmd())
 
 	if err := rootCmd.Execute(); err != nil {
 		var exitErr *cli.ExitError

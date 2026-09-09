@@ -40,7 +40,7 @@ func startCmd() *cobra.Command {
 			}
 
 			fmt.Printf("Starting new container %s\n", app.ContainerName)
-			return app.Client.Run(app.Config, app.ContainerName, app.Binds)
+			return app.Client.Run(app.Config, app.ContainerName, app.Binds, app.Root)
 		},
 	}
 }
@@ -89,7 +89,7 @@ func restartCmd() *cobra.Command {
 			}
 
 			fmt.Printf("Starting new container %s\n", app.ContainerName)
-			return app.Client.Run(app.Config, app.ContainerName, app.Binds)
+			return app.Client.Run(app.Config, app.ContainerName, app.Binds, app.Root)
 		},
 	}
 }
@@ -148,7 +148,63 @@ func ensureContainer(app *App) error {
 		return nil
 	}
 	fmt.Printf("Starting new container %s\n", app.ContainerName)
-	return app.Client.Run(app.Config, app.ContainerName, app.Binds)
+	return app.Client.Run(app.Config, app.ContainerName, app.Binds, app.Root)
+}
+
+func listCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "list",
+		Short: "List all dev106-managed containers",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			app, err := newApp(true)
+			if err != nil {
+				return err
+			}
+			items, err := app.Client.ListManaged()
+			if err != nil {
+				return err
+			}
+			if len(items) == 0 {
+				fmt.Println("No dev106 containers.")
+				return nil
+			}
+			fmt.Printf("%-36s  %-16s  %s\n", "NAME", "STATUS", "ROOT")
+			for _, item := range items {
+				root := item.Root
+				if root == "" {
+					root = "-"
+				}
+				fmt.Printf("%-36s  %-16s  %s\n", item.Name, item.Status, root)
+			}
+			return nil
+		},
+	}
+}
+
+func nukeCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "nuke",
+		Short: "Kill every container managed by dev106",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			app, err := newApp(true)
+			if err != nil {
+				return err
+			}
+			removed, err := app.Client.NukeManaged()
+			if err != nil {
+				return err
+			}
+			if len(removed) == 0 {
+				fmt.Println("No dev106 containers to nuke.")
+				return nil
+			}
+			for _, name := range removed {
+				fmt.Printf("Killed %s\n", name)
+			}
+			fmt.Printf("Nuked %d container(s).\n", len(removed))
+			return nil
+		},
+	}
 }
 
 func shell(app *App) error {

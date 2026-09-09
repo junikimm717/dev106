@@ -7,9 +7,11 @@ import (
 	"os"
 	"os/signal"
 	"os/user"
+	"strings"
 	"syscall"
 
 	"github.com/containerd/errdefs"
+	"github.com/junikimm717/dev106/internal/shared"
 	"github.com/moby/moby/api/pkg/stdcopy"
 	"github.com/moby/moby/api/types/container"
 	dockerClient "github.com/moby/moby/client"
@@ -32,7 +34,7 @@ func NewClient(ctx context.Context) (*DevClient, error) {
 	}, nil
 }
 
-func (d *DevClient) Run(config *DevConfig, containerName string, binds []string) error {
+func (d *DevClient) Run(config *DevConfig, containerName string, binds []string, root string) error {
 	u, err := user.Current()
 	if err != nil {
 		return err
@@ -46,6 +48,7 @@ func (d *DevClient) Run(config *DevConfig, containerName string, binds []string)
 				fmt.Sprintf("DEV_UID=%s", u.Uid),
 				fmt.Sprintf("DEV_GID=%s", u.Gid),
 			},
+			Labels: ContainerLabels(root),
 		},
 		Platform: &platform,
 		HostConfig: &container.HostConfig{
@@ -250,4 +253,62 @@ func (d *DevClient) ContainerExists(containerName string) (bool, error) {
 		return false, nil
 	}
 	return true, nil
+}
+
+type ManagedContainer struct {
+	Name   string
+	Image  string
+	Status string
+	Root   string
+}
+
+func managedLabelFilter() dockerClient.Filters {
+	return make(dockerClient.Filters).Add("label", shared.LabelManaged+"=true")
+}
+
+func (d *DevClient) ListManaged() ([]ManagedContainer, error) {
+	result, err := d.client.ContainerList(d.ctx, dockerClient.ContainerListOptions{
+		All:     true,
+		Filters: managedLabelFilter(),
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	out := make([]ManagedContainer, 0, len(result.Items))
+	for _, item := range result.Items {
+		name := ""
+		if len(item.Names) > 0 {
+			name = strings.TrimPrefix(item.Names[0], "/")
+		}
+		root := ""
+		if item.Labels != nil {
+			root = item.Labels[shared.LabelRoot]
+		}
+		out = append(out, ManagedContainer{
+			Name:   name,
+			Image:  item.Image,
+			Status: item.Status,
+			Root:   root,
+		})
+	}
+	return out, nil
+}
+
+func (d *DevClient) NukeManaged() ([]string, error) {
+	items, err := d.ListManaged()
+	if err != nil {
+		return nil, err
+	}
+	removed := make([]string, 0, len(items))
+	for _, item := range items {
+		ok, err := d.Delete(item.Name)
+		if err != nil {
+			return removed, err
+		}
+		if ok {
+			removed = append(removed, item.Name)
+		}
+	}
+	return removed, nil
 }
