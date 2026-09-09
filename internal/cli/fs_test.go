@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/junikimm717/dev106/internal/shared"
 )
 
 func TestFindRootGitDir(t *testing.T) {
@@ -70,5 +72,21 @@ func TestContainerName(t *testing.T) {
 	}
 	if !strings.HasPrefix(name, "dev106_") {
 		t.Fatalf("name = %q", name)
+	}
+	if !strings.HasSuffix(name, "_"+RootID("/tmp/repo")) {
+		t.Fatalf("name %q should end with hash of root", name)
+	}
+}
+
+func TestContainerLabels(t *testing.T) {
+	labels := ContainerLabels("/Users/me/xv6")
+	if labels[shared.LabelManaged] != "true" {
+		t.Fatalf("managed label = %q", labels[shared.LabelManaged])
+	}
+	if labels[shared.LabelRoot] != "/Users/me/xv6" {
+		t.Fatalf("root label = %q", labels[shared.LabelRoot])
+	}
+	if RootID(labels[shared.LabelRoot]) != RootID("/Users/me/xv6") {
+		t.Fatal("root label must reconstruct the same hash")
 	}
 }
