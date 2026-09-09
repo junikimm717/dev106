@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 
@@ -24,7 +25,10 @@ func newApp(allowNoRoot bool) (*App, error) {
 		return nil, err
 	}
 	ctx := context.Background()
-	client := cli.NewClient(ctx)
+	client, err := cli.NewClient(ctx)
+	if err != nil {
+		return nil, err
+	}
 
 	wd, err := os.Getwd()
 	if err != nil {
@@ -46,6 +50,7 @@ func newApp(allowNoRoot bool) (*App, error) {
 	binds, err := cli.BindMounts(config, root)
 	if err != nil {
 		if allowNoRoot {
+			fmt.Fprintf(os.Stderr, "warning: not using bind mounts: %v\n", err)
 			return &App{
 				Config: config,
 				Client: client,
@@ -55,10 +60,15 @@ func newApp(allowNoRoot bool) (*App, error) {
 		}
 	}
 
+	name, err := cli.ContainerName(root)
+	if err != nil {
+		return nil, err
+	}
+
 	return &App{
 		Config:        config,
 		Client:        client,
-		ContainerName: cli.ContainerName(root),
+		ContainerName: name,
 		Binds:         binds,
 	}, nil
 }
@@ -66,7 +76,8 @@ func newApp(allowNoRoot bool) (*App, error) {
 func main() {
 	rootCmd := &cobra.Command{
 		Use:   "dev106",
-		Short: "dev106 container runtime",
+		Short: "Open a shell in the course container",
+		Long:  "dev106 starts (or attaches to) a development container for the current git repo. With no arguments it opens an interactive shell.",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			app, err := newApp(false)
 			if err != nil {
@@ -86,7 +97,14 @@ func main() {
 	rootCmd.AddCommand(execCmd())
 
 	if err := rootCmd.Execute(); err != nil {
-		fmt.Println(err)
+		var exitErr *cli.ExitError
+		if errors.As(err, &exitErr) {
+			if msg := exitErr.Error(); msg != "" {
+				fmt.Fprintln(os.Stderr, msg)
+			}
+			os.Exit(exitErr.Code)
+		}
+		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 }

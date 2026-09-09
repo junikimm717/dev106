@@ -4,13 +4,13 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"log"
 	"os"
 	"os/signal"
 	"os/user"
 	"syscall"
 
 	"github.com/containerd/errdefs"
+	"github.com/moby/moby/api/pkg/stdcopy"
 	"github.com/moby/moby/api/types/container"
 	dockerClient "github.com/moby/moby/client"
 	"golang.org/x/term"
@@ -21,15 +21,15 @@ type DevClient struct {
 	ctx    context.Context
 }
 
-func NewClient(ctx context.Context) *DevClient {
+func NewClient(ctx context.Context) (*DevClient, error) {
 	client, err := dockerClient.New(dockerClient.FromEnv)
 	if err != nil {
-		log.Fatalln("Could not connect to docker client!", err)
+		return nil, fmt.Errorf("could not connect to Docker; is the daemon running?\n%w", err)
 	}
 	return &DevClient{
 		client: client,
 		ctx:    ctx,
-	}
+	}, nil
 }
 
 func (d *DevClient) Run(config *DevConfig, containerName string, binds []string) error {
@@ -53,6 +53,12 @@ func (d *DevClient) Run(config *DevConfig, containerName string, binds []string)
 		},
 	})
 	if err != nil {
+		if errdefs.IsNotFound(err) {
+			return fmt.Errorf("image %s is not installed locally.\nRun `dev106 pull` first.", config.Image)
+		}
+		if errdefs.IsConflict(err) {
+			return fmt.Errorf("container %s already exists.\nUse `dev106` to attach, or `dev106 restart` to recreate it.", containerName)
+		}
 		return err
 	}
 	if _, err := d.client.ContainerStart(d.ctx, resp.ID, dockerClient.ContainerStartOptions{}); err != nil {
@@ -112,9 +118,12 @@ func (d *DevClient) Exec(containerName string) error {
 	defer attachResp.Close()
 
 	fd := int(os.Stdin.Fd())
+	if !term.IsTerminal(fd) {
+		return fmt.Errorf("dev106 shell needs an interactive terminal (stdin is not a TTY)")
+	}
 	oldState, err := term.MakeRaw(fd)
 	if err != nil {
-		return err
+		return fmt.Errorf("dev106 shell needs an interactive terminal: %w", err)
 	}
 
 	// terminal resizing
@@ -140,9 +149,19 @@ func (d *DevClient) Exec(containerName string) error {
 	}()
 
 	// pipe container → stdout
-	_, err = io.Copy(os.Stdout, attachResp.Reader)
+	_, copyErr := io.Copy(os.Stdout, attachResp.Reader)
 
-	return err
+	inspectResp, err := d.client.ExecInspect(d.ctx, execResp.ID, dockerClient.ExecInspectOptions{})
+	if err != nil {
+		if copyErr != nil {
+			return copyErr
+		}
+		return err
+	}
+	if inspectResp.ExitCode != 0 {
+		return &ExitError{Code: inspectResp.ExitCode}
+	}
+	return copyErr
 }
 
 func (d *DevClient) ExecCmd(containerName string, cmd []string) error {
@@ -159,6 +178,7 @@ func (d *DevClient) ExecCmd(containerName string, cmd []string) error {
 		dockerClient.ExecCreateOptions{
 			User:         userSpec,
 			Cmd:          cmd,
+			AttachStdin:  true,
 			AttachStdout: true,
 			AttachStderr: true,
 		},
@@ -177,8 +197,12 @@ func (d *DevClient) ExecCmd(containerName string, cmd []string) error {
 	}
 	defer attachResp.Close()
 
-	_, err = io.Copy(os.Stdout, attachResp.Reader)
-	if err != nil {
+	go func() {
+		_, _ = io.Copy(attachResp.Conn, os.Stdin)
+		_ = attachResp.CloseWrite()
+	}()
+
+	if _, err := stdcopy.StdCopy(os.Stdout, os.Stderr, attachResp.Reader); err != nil {
 		return err
 	}
 
@@ -187,13 +211,13 @@ func (d *DevClient) ExecCmd(containerName string, cmd []string) error {
 		return err
 	}
 	if inspectResp.ExitCode != 0 {
-		return fmt.Errorf("command exited with status %d", inspectResp.ExitCode)
+		return &ExitError{Code: inspectResp.ExitCode}
 	}
 
 	return nil
 }
 
-func (d *DevClient) Delete(containerName string) error {
+func (d *DevClient) Delete(containerName string) (bool, error) {
 	_, err := d.client.ContainerRemove(
 		d.ctx,
 		containerName,
@@ -202,9 +226,12 @@ func (d *DevClient) Delete(containerName string) error {
 		},
 	)
 	if errdefs.IsNotFound(err) {
-		return nil
+		return false, nil
 	}
-	return err
+	if err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 func (d *DevClient) ContainerExists(containerName string) (bool, error) {
@@ -216,7 +243,10 @@ func (d *DevClient) ContainerExists(containerName string) (bool, error) {
 		return false, err
 	}
 	if !result.Container.State.Running {
-		d.Delete(containerName)
+		fmt.Printf("Removing stopped container %s\n", containerName)
+		if _, err := d.Delete(containerName); err != nil {
+			return false, err
+		}
 		return false, nil
 	}
 	return true, nil

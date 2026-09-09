@@ -9,6 +9,8 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
+var ErrCancelled = errors.New("selection cancelled")
+
 type Choice struct {
 	ID    string
 	Label string
@@ -108,7 +110,7 @@ func Select(prompt string, choices []Choice) (Choice, error) {
 		return Choice{}, errors.New("tui: unexpected model type")
 	}
 	if final.cancelled || !final.confirmed || final.selected < 0 || final.selected >= len(final.choices) {
-		return Choice{}, errors.New("tui: selection cancelled")
+		return Choice{}, ErrCancelled
 	}
 	return final.choices[final.selected], nil
 }

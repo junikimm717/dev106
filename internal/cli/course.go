@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/junikimm717/dev106/internal/tui"
@@ -44,6 +45,9 @@ func resolveCourse() (courseOption, error) {
 
 	selected, err := tui.Select("Which course are you taking?", choices)
 	if err != nil {
+		if errors.Is(err, tui.ErrCancelled) {
+			return courseOption{}, errors.New("setup cancelled; no config written")
+		}
 		return courseOption{}, err
 	}
 

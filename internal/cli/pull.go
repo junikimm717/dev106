@@ -25,7 +25,7 @@ func (d *DevClient) Pull(config *DevConfig) error {
 		},
 	)
 	if err != nil {
-		return err
+		return fmt.Errorf("could not pull %s: %w", config.Image, err)
 	}
 	defer resp.Close()
 
@@ -55,5 +55,7 @@ func (d *DevClient) Pull(config *DevConfig) error {
 		}
 	}
 
+	platform := config.linuxPlatform()
+	fmt.Printf("Pulled %s (%s/%s)\n", config.Image, platform.OS, platform.Architecture)
 	return nil
 }
