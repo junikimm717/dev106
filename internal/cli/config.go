@@ -97,12 +97,10 @@ func LoadConfig() (*DevConfig, error) {
 		}
 
 		fmt.Printf("Created config at %s\n", path)
-		fmt.Printf("Using %s image %s\n", course.Name, course.Image)
+		fmt.Printf("Using %s image %s (follow_host=%t)\n", course.Name, course.Image, course.FollowHost)
 		if !tui.HasTTY() {
 			fmt.Println("No TTY available; defaulted to 6.181.")
 		}
-		fmt.Println("Please edit it and re-run dev106.")
-		os.Exit(0)
 	}
 
 	cfg := &DevConfig{
@@ -110,13 +108,12 @@ func LoadConfig() (*DevConfig, error) {
 	}
 
 	if _, err := toml.DecodeFile(path, cfg); err != nil {
-		return nil, fmt.Errorf("failed to parse config: %w", err)
+		return nil, fmt.Errorf("failed to parse config %s: %w", path, err)
 	}
 
 	if cfg.Image == "" {
-		return nil, errors.New("config: image is required")
+		return nil, fmt.Errorf("config: image is required in %s", path)
 	}
 
 	return cfg, nil
 }
-

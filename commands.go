@@ -29,6 +29,16 @@ func startCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+
+			exists, err := app.Client.ContainerExists(app.ContainerName)
+			if err != nil {
+				return err
+			}
+			if exists {
+				fmt.Printf("Container %s is already running\n", app.ContainerName)
+				return nil
+			}
+
 			fmt.Printf("Starting new container %s\n", app.ContainerName)
 			return app.Client.Run(app.Config, app.ContainerName, app.Binds)
 		},
@@ -44,8 +54,16 @@ func killCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			fmt.Printf("Killing container %s\n", app.ContainerName)
-			return app.Client.Delete(app.ContainerName)
+			removed, err := app.Client.Delete(app.ContainerName)
+			if err != nil {
+				return err
+			}
+			if removed {
+				fmt.Printf("Killed container %s\n", app.ContainerName)
+			} else {
+				fmt.Printf("No container %s to kill\n", app.ContainerName)
+			}
+			return nil
 		},
 	}
 }
@@ -60,9 +78,14 @@ func restartCmd() *cobra.Command {
 				return err
 			}
 
-			fmt.Printf("Killing container %s\n", app.ContainerName)
-			if err := app.Client.Delete(app.ContainerName); err != nil {
+			removed, err := app.Client.Delete(app.ContainerName)
+			if err != nil {
 				return err
+			}
+			if removed {
+				fmt.Printf("Killed container %s\n", app.ContainerName)
+			} else {
+				fmt.Printf("No existing container %s\n", app.ContainerName)
 			}
 
 			fmt.Printf("Starting new container %s\n", app.ContainerName)
@@ -73,25 +96,28 @@ func restartCmd() *cobra.Command {
 
 func execCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "exec [command] [args...]",
-		Short: "Execute a command in the container",
-		Args:  cobra.MinimumNArgs(1),
+		Use:                "exec [command] [args...]",
+		Short:              "Execute a command in the container",
+		Long:               "Execute a command in the container. Flags after exec are passed through (no `--` needed).",
+		DisableFlagParsing: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if len(args) > 0 && (args[0] == "-h" || args[0] == "--help") {
+				return cmd.Help()
+			}
+			if len(args) > 0 && args[0] == "--" {
+				args = args[1:]
+			}
+			if len(args) == 0 {
+				return fmt.Errorf("exec requires a command\nExample: dev106 exec make -j4")
+			}
+
 			app, err := newApp(false)
 			if err != nil {
 				return err
 			}
 
-			exists, err := app.Client.ContainerExists(app.ContainerName)
-			if err != nil {
+			if err := ensureContainer(app); err != nil {
 				return err
-			}
-
-			if !exists {
-				fmt.Printf("Starting new container %s\n", app.ContainerName)
-				if err := app.Client.Run(app.Config, app.ContainerName, app.Binds); err != nil {
-					return err
-				}
 			}
 
 			return app.Client.ExecCmd(app.ContainerName, args)
@@ -102,7 +128,7 @@ func execCmd() *cobra.Command {
 func shellCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "shell",
-		Short: "Open shell in container",
+		Short: "Open shell in container (same as running dev106 with no args)",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			app, err := newApp(false)
 			if err != nil {
@@ -113,18 +139,21 @@ func shellCmd() *cobra.Command {
 	}
 }
 
-func shell(app *App) error {
+func ensureContainer(app *App) error {
 	exists, err := app.Client.ContainerExists(app.ContainerName)
 	if err != nil {
 		return err
 	}
-
-	if !exists {
-		fmt.Printf("Starting new container %s\n", app.ContainerName)
-		if err := app.Client.Run(app.Config, app.ContainerName, app.Binds); err != nil {
-			return err
-		}
+	if exists {
+		return nil
 	}
+	fmt.Printf("Starting new container %s\n", app.ContainerName)
+	return app.Client.Run(app.Config, app.ContainerName, app.Binds)
+}
 
+func shell(app *App) error {
+	if err := ensureContainer(app); err != nil {
+		return err
+	}
 	return app.Client.Exec(app.ContainerName)
 }

@@ -28,25 +28,25 @@ func FindRoot(dir string) (string, error) {
 		if err != nil && !errors.Is(err, fs.ErrNotExist) {
 			return "", err
 		}
-		if stat != nil && stat.IsDir() {
+		if stat != nil && (stat.IsDir() || stat.Mode().IsRegular()) {
 			return realpath, nil
 		}
 		parent := filepath.Dir(realpath)
 		if parent == realpath {
-			return "", errors.New("Could not find git repository root!")
+			return "", errors.New("not inside a git repository (dev106 needs a repo root to name the container).\ncd into a clone, or use `dev106 pull` which works anywhere")
 		}
 		realpath = parent
 	}
 }
 
-func ContainerName(dir string) string {
+func ContainerName(dir string) (string, error) {
 	u, err := user.Current()
 	if err != nil {
-		panic(err)
+		return "", fmt.Errorf("could not determine current user: %w", err)
 	}
 	sum := sha256.Sum256([]byte(dir))
 	id := hex.EncodeToString(sum[:])[:12]
-	return fmt.Sprintf("%s_%s_%s", shared.CONTAINER_PREFIX, u.Username, id)
+	return fmt.Sprintf("%s_%s_%s", shared.CONTAINER_PREFIX, u.Username, id), nil
 }
 
 // compute the bind mounts that we'll need for a container.

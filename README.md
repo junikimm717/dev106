@@ -12,11 +12,10 @@ shell from anywhere inside your repo and it will seek the repository root.
 permission hiccups. `sudo` works automatically (provided you have a good image).
 
 ```bash
-$ cd {some_6106_assignment}
-# pull the image first
+$ cd {some_assignment}
+# first run writes ~/.config/dev106/config.toml (or $XDG_CONFIG_HOME/dev106)
+# after asking 6.181 vs 6.106 when a TTY is available, then continues
 $ dev106 pull
-# this will give you a shell into a running container. authorize-telerun will
-# save your telerun credentials and have it persist across containers.
 $ dev106
 dev106@64bf911d7f23:/workspace$ authorize-telerun
 Enter your telerun credentials
@@ -24,12 +23,9 @@ Username: ^C
 dev106@64bf911d7f23:/workspace$
 logout
 
-# this will kill the container
+$ dev106 exec make -j4
 $ dev106 kill
-# this will attempt to kill and restart a container.
 $ dev106 restart
-dev106@64bf911d7f23:/workspace$
-logout
 ```
 
 ## Installation
@@ -44,18 +40,23 @@ go install github.com/junikimm717/dev106@latest
 dev106
 ```
 
-If that program runs successfully, it should have generated a config at
-`~/.config/dev106/config.toml` (on your host machine).
+The first run writes a config at `~/.config/dev106/config.toml` (or
+`$XDG_CONFIG_HOME/dev106/config.toml`) and then continues with the command you
+typed. On a TTY it asks whether you are taking 6.181 or 6.106; without a TTY it
+defaults to 6.181. You can still edit the file afterward.
 
-Go to `~/.config/dev106/config.toml` and change the name of the docker image to
-your image (by default it uses Juni's neovim image).
+```toml
+image = "ghcr.io/junikimm717/dev106/nvim_6181:latest"
+telerun = true
+# Use the host architecture (arm64/amd64). On for 6.181, off for 6.106.
+follow_host = true
+```
 
-**Notice**: there are now two different tags, 4.0-rc1 and 2.1.0, which
-correspond to different versions of the cilk compiler.
+**6.106** images (`nvim:2.1.0`, `nvim:4.0-rc1`, `mit_6106`) are amd64-only; keep
+`follow_host = false` so they run under emulation on Apple Silicon.
 
-For 6.1810 (xv6 / RISC-V), use `ghcr.io/junikimm717/dev106/mit_6181:latest`
-or `ghcr.io/junikimm717/dev106/nvim_6181:latest`. These images include
-QEMU 7.2+, gdb-multiarch, and `riscv64-linux-gnu` GCC/binutils.
+**6.181** images (`nvim_6181:latest`, `mit_6181:latest`) are built for amd64 and
+arm64. They include QEMU 7.2+, gdb-multiarch, and `riscv64-linux-gnu` GCC/binutils.
 
 ## Container Bootstrapper
 
