@@ -116,6 +116,7 @@ RUN apt-get update && \
   qemu-system-riscv \
   gcc-riscv64-linux-gnu \
   binutils-riscv64-linux-gnu \
+  clangd \
   bc \
   python3 && \
   rm -rf /var/lib/apt/lists/*
@@ -128,7 +129,61 @@ RUN ln -sfn python3 /usr/bin/python
 # Fail the build if the course-required tools are missing or too old.
 RUN qemu-system-riscv64 --version && \
   riscv64-linux-gnu-gcc --version && \
-  gdb-multiarch --version
+  gdb-multiarch --version && \
+  clangd --version
+
+# Bake xv6 Makefile CFLAGS + RISC-V gcc builtins into clangd's user config
+# so any image based on mit_6181 (nvim, VS Code, etc.) gets the same LSP.
+# -I/workspace is the Makefile's -I. (repo root is bind-mounted there).
+# gcc -print-file-name=include is the Linux stand-in for a cross-gcc
+# builtin include; -nostdinc keeps host libc out.
+RUN <<'EOF'
+set -eu
+GCC_INC="$(riscv64-linux-gnu-gcc -print-file-name=include)"
+test -f "$GCC_INC/stdarg.h"
+mkdir -p /home/dev106/.config/clangd
+cat > /home/dev106/.config/clangd/config.yaml << YAML
+CompileFlags:
+  Add:
+    - --target=riscv64-linux-gnu
+    - -march=rv64gc
+    - -mabi=lp64d
+    - -Wall
+    - -Werror
+    - -Wno-unknown-attributes
+    - -O
+    - -fno-omit-frame-pointer
+    - -ggdb
+    - -gdwarf-2
+    - -mcmodel=medany
+    - -ffreestanding
+    - -fno-common
+    - -nostdlib
+    - -fno-builtin-strncpy
+    - -fno-builtin-strncmp
+    - -fno-builtin-strlen
+    - -fno-builtin-memset
+    - -fno-builtin-memmove
+    - -fno-builtin-memcmp
+    - -fno-builtin-log
+    - -fno-builtin-bzero
+    - -fno-builtin-strchr
+    - -fno-builtin-exit
+    - -fno-builtin-malloc
+    - -fno-builtin-putc
+    - -fno-builtin-free
+    - -fno-builtin-memcpy
+    - -Wno-main
+    - -fno-builtin-printf
+    - -fno-builtin-fprintf
+    - -fno-builtin-vprintf
+    - -I/workspace
+    - -I${GCC_INC}
+    - -nostdinc
+    - -fno-stack-protector
+    - -fno-pie
+YAML
+EOF
 
 COPY --from=builder /workspace/bootstrap /bootstrap
 
@@ -169,67 +224,6 @@ RUN cd /nvim && make -j$(nproc)
 RUN /nvim/build/bin/setup-nvim
 
 COPY ./home /home/dev106
-
-# System clangd so nvim's enable_if("clangd") picks it up (mason is empty).
-# Bake xv6 Makefile CFLAGS + RISC-V gcc builtins into clangd's user config.
-# -I/workspace is the Makefile's -I. (repo root is bind-mounted there).
-# gcc -print-file-name=include is the Linux stand-in for the Homebrew
-# riscv-gnu-toolchain gcc include; -nostdinc keeps host libc out.
-RUN <<'EOF'
-set -eu
-apt-get update
-apt-get install -y --no-install-recommends clangd
-rm -rf /var/lib/apt/lists/*
-
-GCC_INC="$(riscv64-linux-gnu-gcc -print-file-name=include)"
-test -f "$GCC_INC/stdarg.h"
-mkdir -p /home/dev106/.config/clangd
-cat > /home/dev106/.config/clangd/config.yaml << YAML
-CompileFlags:
-  Remove:
-    - -I/opt/homebrew/**
-  Add:
-    - --target=riscv64-linux-gnu
-    - -march=rv64gc
-    - -mabi=lp64d
-    - -Wall
-    - -Werror
-    - -Wno-unknown-attributes
-    - -O
-    - -fno-omit-frame-pointer
-    - -ggdb
-    - -gdwarf-2
-    - -mcmodel=medany
-    - -ffreestanding
-    - -fno-common
-    - -nostdlib
-    - -fno-builtin-strncpy
-    - -fno-builtin-strncmp
-    - -fno-builtin-strlen
-    - -fno-builtin-memset
-    - -fno-builtin-memmove
-    - -fno-builtin-memcmp
-    - -fno-builtin-log
-    - -fno-builtin-bzero
-    - -fno-builtin-strchr
-    - -fno-builtin-exit
-    - -fno-builtin-malloc
-    - -fno-builtin-putc
-    - -fno-builtin-free
-    - -fno-builtin-memcpy
-    - -Wno-main
-    - -fno-builtin-printf
-    - -fno-builtin-fprintf
-    - -fno-builtin-vprintf
-    - -I/workspace
-    - -I${GCC_INC}
-    - -nostdinc
-    - -fno-stack-protector
-    - -fno-pie
-YAML
-
-clangd --version
-EOF
 
 ENV DEV_CHOWN="/nvim"
 ENV DEV_CHOWNEXCLUDE="/nvim/build/pkgs"
