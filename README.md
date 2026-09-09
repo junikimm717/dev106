@@ -47,7 +47,7 @@ defaults to 6.181. You can still edit the file afterward.
 
 ```toml
 image = "ghcr.io/junikimm717/dev106/nvim_6181:latest"
-telerun = true
+telerun = false
 # Use the host architecture (arm64/amd64). On for 6.181, off for 6.106.
 follow_host = true
 ```

@@ -53,6 +53,9 @@ func TestDefaultConfigContents(t *testing.T) {
 	if !strings.Contains(got, `follow_host = true`) {
 		t.Fatalf("6.181 config should enable follow_host:\n%s", got)
 	}
+	if !strings.Contains(got, `telerun = false`) {
+		t.Fatalf("6.181 config should disable telerun:\n%s", got)
+	}
 	if !strings.Contains(got, courseOptions[0].Image) {
 		t.Fatalf("6.181 config missing image:\n%s", got)
 	}
@@ -60,6 +63,9 @@ func TestDefaultConfigContents(t *testing.T) {
 	got = defaultConfigContents(courseOptions[1])
 	if !strings.Contains(got, `follow_host = false`) {
 		t.Fatalf("6.106 config should disable follow_host:\n%s", got)
+	}
+	if !strings.Contains(got, `telerun = true`) {
+		t.Fatalf("6.106 config should enable telerun:\n%s", got)
 	}
 }
 

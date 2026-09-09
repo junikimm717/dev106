@@ -12,6 +12,7 @@ type courseOption struct {
 	Label      string
 	Image      string
 	FollowHost bool
+	Telerun    bool
 }
 
 var courseOptions = []courseOption{
@@ -20,12 +21,14 @@ var courseOptions = []courseOption{
 		Label:      "6.181  Operating System Engineering (xv6 / RISC-V)",
 		Image:      "ghcr.io/junikimm717/dev106/nvim_6181:latest",
 		FollowHost: true,
+		Telerun:    false,
 	},
 	{
 		Name:       "6.106",
 		Label:      "6.106  Software Performance Engineering",
 		Image:      "ghcr.io/junikimm717/dev106/nvim:2.1.0",
 		FollowHost: false,
+		Telerun:    true,
 	},
 }
 

@@ -46,13 +46,13 @@ func defaultConfigContents(course courseOption) string {
 # Required:
 image = %q
 
-# Optional (defaults to true):
-telerun = true
+# Sync ~/.telerun into the container. On for 6.106; off for 6.181.
+telerun = %t
 
 # Use the host architecture instead of forcing linux/amd64.
 # Enabled by default for 6.181; disabled for 6.106.
 follow_host = %t
-`, course.Image, course.FollowHost)
+`, course.Image, course.Telerun, course.FollowHost)
 }
 
 func (c *DevConfig) followHost() bool {
@@ -101,6 +101,12 @@ func LoadConfig() (*DevConfig, error) {
 		if !tui.HasTTY() {
 			fmt.Println("No TTY available; defaulted to 6.181.")
 		}
+		fmt.Println()
+		fmt.Println("Get started:")
+		fmt.Println("  1. cd into a course assignment repo")
+		fmt.Println("  2. dev106 pull")
+		fmt.Println("  3. dev106")
+		fmt.Println("Edit the config anytime to change image, telerun, or follow_host.")
 	}
 
 	cfg := &DevConfig{
