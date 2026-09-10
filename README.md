@@ -35,20 +35,40 @@ $ dev106 nuke
 
 ## Installation
 
-Download a pre-release binary from the
-[nightly release](https://github.com/junikimm717/dev106/releases/tag/nightly),
-or install from source:
+```bash
+curl -fsSL https://raw.githubusercontent.com/junikimm717/dev106/master/install.sh | sh
+```
+
+Checks Docker, installs the binary, then runs `dev106 pull` to pick your course
+and download the image. macOS, Linux, and WSL2. Re-run it to upgrade. It
+explains what to do if anything is missing; `sh install.sh --help` lists the
+knobs.
+
+Or, from source:
 
 ```bash
 go install github.com/junikimm717/dev106@latest
-# run the binary, this should work if ~/go/bin is in your $PATH
-dev106
 ```
+
+Either way you need Docker running. dev106 talks to the Docker socket directly
+and reads `$DOCKER_HOST`, but it does **not** read Docker *contexts*. Docker
+Desktop and OrbStack provide `unix:///var/run/docker.sock` and just work;
+Colima, Rancher Desktop and rootless Docker only register a context, so export
+the endpoint yourself:
+
+```bash
+export DOCKER_HOST="unix://$HOME/.colima/default/docker.sock"  # colima
+```
+
+On Windows, run dev106 inside WSL2 rather than PowerShell, and keep your repos
+under your Linux home (`~`) instead of `/mnt/c`.
 
 The first run writes a config at `~/.config/dev106/config.toml` (or
 `$XDG_CONFIG_HOME/dev106/config.toml`) and then continues with the command you
 typed. On a TTY it asks whether you are taking 6.181 or 6.106; without a TTY it
-defaults to 6.181. You can still edit the file afterward.
+defaults to 6.181. If you cancel the picker (`q` or Ctrl-C), nothing is written
+and dev106 asks again the next time you run it. You can still edit the file
+afterward.
 
 ```toml
 image = "ghcr.io/junikimm717/dev106/nvim_6181:latest"
