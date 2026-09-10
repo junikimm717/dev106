@@ -2,7 +2,9 @@ package main
 
 import (
 	"fmt"
+	"os"
 
+	"github.com/junikimm717/dev106/internal/cli"
 	"github.com/spf13/cobra"
 )
 
@@ -145,10 +147,50 @@ func ensureContainer(app *App) error {
 		return err
 	}
 	if exists {
+		if app.Config.USB {
+			if warning := app.Client.StaleUSBWarning(app.ContainerName, cli.DetectUSB()); warning != "" {
+				fmt.Fprint(os.Stderr, warning)
+			}
+		}
 		return nil
+	}
+	// The device list is frozen here, so this is where a host that can never
+	// pass USB through gets said out loud. The actionable cases already
+	// printed in newApp, hence the Supported check rather than an
+	// unconditional warning.
+	if app.Config.USB {
+		if devices := cli.DetectUSB(); !devices.Supported {
+			fmt.Fprint(os.Stderr, cli.USBWarning(devices))
+		}
 	}
 	fmt.Printf("Starting new container %s\n", app.ContainerName)
 	return app.Client.Run(app.Config, app.ContainerName, app.Binds, app.Root)
+}
+
+func configCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "config",
+		Short: "Show the effective config and where it came from",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			app, err := newApp(true)
+			if err != nil {
+				return err
+			}
+			c := app.Config
+			fmt.Printf("global:  %s\n", c.GlobalPath)
+			if c.RepoPath != "" {
+				fmt.Printf("repo:    %s  (overrides the global config)\n", c.RepoPath)
+			} else {
+				fmt.Printf("repo:    none (drop a %s at a repo root to override)\n", cli.RepoConfigName)
+			}
+			fmt.Println()
+			fmt.Printf("image        = %q\n", c.Image)
+			fmt.Printf("telerun      = %t\n", c.Telerun)
+			fmt.Printf("labbc        = %t\n", c.LabBC)
+			fmt.Printf("usb          = %t\n", c.USB)
+			return nil
+		},
+	}
 }
 
 func listCmd() *cobra.Command {

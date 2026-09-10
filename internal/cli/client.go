@@ -54,6 +54,12 @@ func (d *DevClient) Run(config *DevConfig, containerName string, binds []string,
 		return err
 	}
 	platform := config.linuxPlatform()
+	hostConfig := &container.HostConfig{
+		Binds: binds,
+	}
+	if config.USB {
+		applyUSB(hostConfig, DetectUSB())
+	}
 	resp, err := d.client.ContainerCreate(d.ctx, dockerClient.ContainerCreateOptions{
 		Image: config.Image,
 		Name:  containerName,
@@ -65,10 +71,8 @@ func (d *DevClient) Run(config *DevConfig, containerName string, binds []string,
 			Labels:     ContainerLabels(root),
 			WorkingDir: shared.CONTAINER_WORKSPACE,
 		},
-		Platform: &platform,
-		HostConfig: &container.HostConfig{
-			Binds: binds,
-		},
+		Platform:   &platform,
+		HostConfig: hostConfig,
 	})
 	if err != nil {
 		if errdefs.IsNotFound(err) {
@@ -270,6 +274,16 @@ func (d *DevClient) ContainerExists(containerName string) (bool, error) {
 		return false, nil
 	}
 	return true, nil
+}
+
+// StaleUSBWarning warns when a running container predates the board being
+// plugged in, since its device list was fixed at creation time.
+func (d *DevClient) StaleUSBWarning(containerName string, u USBDevices) string {
+	result, err := d.client.ContainerInspect(d.ctx, containerName, dockerClient.ContainerInspectOptions{})
+	if err != nil || result.Container.HostConfig == nil {
+		return ""
+	}
+	return staleContainerAdvice(u, containerHasUSBPassthrough(result.Container.HostConfig.Binds))
 }
 
 type ManagedContainer struct {

@@ -14,10 +14,21 @@ import (
 	"github.com/opencontainers/image-spec/specs-go/v1"
 )
 
+// RepoConfigName is a per-repository override that layers on top of the
+// global config, so a 6.205 checkout can differ from the 6.181 default
+// without either one being edited.
+const RepoConfigName = ".dev106.toml"
+
 type DevConfig struct {
 	Telerun    bool   `toml:"telerun"`
 	Image      string `toml:"image"`
 	FollowHost *bool  `toml:"follow_host"`
+	LabBC      bool   `toml:"labbc"`
+	USB        bool   `toml:"usb"`
+
+	// Where the values came from, for `dev106 config` and error messages.
+	GlobalPath string `toml:"-"`
+	RepoPath   string `toml:"-"`
 }
 
 func configDir() (string, error) {
@@ -46,20 +57,35 @@ func defaultConfigContents(course courseOption) string {
 # Required:
 image = %q
 
-# Sync ~/.telerun into the container. On for 6.106; off for 6.181.
+# Sync ~/.telerun into the container. On for 6.106; off elsewhere.
 telerun = %t
 
 # Use the host architecture instead of forcing linux/amd64.
-# Enabled by default for 6.181; disabled for 6.106.
+# Enabled by default for 6.181 and 6.205; disabled for 6.106.
 follow_host = %t
-`, course.Image, course.Telerun, course.FollowHost)
+
+# Persist lab-bc credentials on the host, so "lab-bc configure" is a
+# one-time step rather than once per container. 6.205 only.
+labbc = %t
+
+# Pass the FPGA board through to the container for flashing and UART.
+# 6.205 only, and only works on a Linux host (including WSL2).
+usb = %t
+
+# Taking more than one class? Drop a %s at the root of a repo to
+# override any of these for that repo alone:
+#
+#     image = "ghcr.io/junikimm717/dev106/mit_6205:latest"
+#     labbc = true
+#     usb = true
+`, course.Image, course.Telerun, course.FollowHost, course.LabBC, course.USB, RepoConfigName)
 }
 
 func (c *DevConfig) followHost() bool {
 	if c.FollowHost != nil {
 		return *c.FollowHost
 	}
-	return strings.Contains(c.Image, "6181")
+	return strings.Contains(c.Image, "6181") || strings.Contains(c.Image, "6205")
 }
 
 func (c *DevConfig) linuxPlatform() v1.Platform {
@@ -73,7 +99,11 @@ func (c *DevConfig) linuxPlatform() v1.Platform {
 	}
 }
 
-func LoadConfig() (*DevConfig, error) {
+// LoadConfig reads the global config, then layers the repo's RepoConfigName
+// over it when root names a repository that has one. A key absent from the
+// repo file keeps its global value, so an override only has to name what
+// actually differs. Pass "" for root to skip the overlay.
+func LoadConfig(root string) (*DevConfig, error) {
 	path, err := configPath()
 	if err != nil {
 		return nil, err
@@ -110,11 +140,24 @@ func LoadConfig() (*DevConfig, error) {
 	}
 
 	cfg := &DevConfig{
-		Telerun: true, // default
+		Telerun:    true, // default
+		GlobalPath: path,
 	}
 
 	if _, err := toml.DecodeFile(path, cfg); err != nil {
 		return nil, fmt.Errorf("failed to parse config %s: %w", path, err)
+	}
+
+	if root != "" {
+		repoPath := filepath.Join(root, RepoConfigName)
+		if _, err := os.Stat(repoPath); err == nil {
+			if _, err := toml.DecodeFile(repoPath, cfg); err != nil {
+				return nil, fmt.Errorf("failed to parse %s: %w", repoPath, err)
+			}
+			cfg.RepoPath = repoPath
+		} else if !errors.Is(err, os.ErrNotExist) {
+			return nil, err
+		}
 	}
 
 	if cfg.Image == "" {

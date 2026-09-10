@@ -2,7 +2,7 @@
 
 Development containers and configuration for classwork.
 
-Currently supporting 6.106 and 6.181
+Currently supporting 6.106, 6.181, and 6.205
 
 ## Installation
 
@@ -38,16 +38,19 @@ under your Linux home (`~`) instead of `/mnt/c`.
 
 The first run writes a config at `~/.config/dev106/config.toml` (or
 `$XDG_CONFIG_HOME/dev106/config.toml`) and then continues with the command you
-typed. On a TTY it asks whether you are taking 6.181 or 6.106; without a TTY it
-defaults to 6.181. If you cancel the picker (`q` or Ctrl-C), nothing is written
-and dev106 asks again the next time you run it. You can still edit the file
+typed. On a TTY it asks which course you are taking; without a TTY it defaults
+to 6.181. If you cancel the picker (`q` or Ctrl-C), nothing is written and
+dev106 asks again the next time you run it. You can still edit the file
 afterward.
 
 ```toml
 image = "ghcr.io/junikimm717/dev106/nvim_6181:latest"
 telerun = false
-# Use the host architecture (arm64/amd64). On for 6.181, off for 6.106.
+# Use the host architecture (arm64/amd64). On for 6.181 and 6.205, off for 6.106.
 follow_host = true
+# 6.205 only; see below.
+labbc = false
+usb = false
 ```
 
 **6.181** images (`nvim_6181:latest`, `mit_6181:latest`) are built for amd64 and
@@ -55,6 +58,25 @@ arm64. They include QEMU 7.2+, gdb-multiarch, and `riscv64-linux-gnu` GCC/binuti
 
 **6.106** images (`nvim:2.1.0`, `nvim:4.0-rc1`, `mit_6106`) are amd64-only; keep
 `follow_host = false` so they run under emulation on Apple Silicon.
+
+**6.205** images (`nvim_6205:latest`, `mit_6205:latest`) are amd64 and arm64.
+See [6.2050](#62050) below.
+
+### Taking more than one class
+
+Drop a `.dev106.toml` at the root of a repo and it overrides the global config
+for that repo alone. Only name the keys that differ; everything else falls
+through to the global file. So the global config stays on 6.181 while your
+6.205 checkouts opt themselves in:
+
+```toml
+# ~/6205/lab01/.dev106.toml
+image = "ghcr.io/junikimm717/dev106/nvim_6205:latest"
+labbc = true
+usb = true
+```
+
+`dev106 config` prints the effective settings and which file each came from.
 
 
 ## Features:
@@ -81,10 +103,55 @@ logout
 
 $ dev106 exec make -j4
 $ dev106 list
+$ dev106 config
 $ dev106 kill
 $ dev106 restart
 $ dev106 nuke
 ```
+
+## 6.2050
+
+Vivado is not installed and never will be — it is ~90 GB. Builds go to the
+course's build server through `lab-bc`, exactly as the
+[course docs](https://fpga.mit.edu/6205/F26/documentation/vivado) describe. The
+image ships Icarus Verilog 12, cocotb, pyserial, openFPGALoader, vicoco, and
+`lab-bc`, all on `PATH`.
+
+```toml
+labbc = true
+usb = true
+```
+
+`labbc = true` bind-mounts `~/.config/lab-bc` from the host, so `lab-bc
+configure` is a one-time step. Your kerberos and MIT ID live on your machine,
+not in the image, and survive `dev106 restart` and `dev106 nuke`.
+
+```bash
+$ dev106
+dev106@8f2c1a:/workspace$ lab-bc configure     # once, ever
+dev106@8f2c1a:/workspace$ lab-bc build ./ build.tcl
+```
+
+`usb = true` passes the Urbana board (FTDI FT2232H, `0403:6010`) into the
+container for flashing and UART: `/dev/bus/usb` is mounted, a cgroup rule for
+USB devices is added so replugging keeps working, any `/dev/ttyUSB*` and
+`/dev/ttyACM*` are mapped in, and the host groups owning those nodes are added
+to your container user.
+
+**This only works on a Linux host, including WSL2.** Docker Desktop on macOS
+and Windows runs the daemon in a VM with no access to your USB bus; there is no
+setting that changes it. Simulation and `lab-bc build` are unaffected — build
+the bitstream in the container and flash from a Linux host or VM.
+
+dev106 tells you when flashing will not work rather than letting openFPGALoader
+fail later:
+
+- no board plugged in → how to attach it (`usbipd attach` under WSL2)
+- board present but owned by root → install the openFPGALoader udev rule
+- board plugged in after the container was created → `dev106 restart`, since a
+  container's devices are fixed when it is created
+
+None of these block you; simulation needs no board.
 
 ## Container Bootstrapper
 

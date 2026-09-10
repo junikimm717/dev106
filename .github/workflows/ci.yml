@@ -54,3 +54,9 @@ jobs:
           sudo apt-get update && sudo apt-get install -y dash devscripts
           checkbashisms install.sh
           dash -n install.sh
+
+      # This one is deliberately bash (arrays, associative arrays) and runs
+      # only inside the 6.205 image build, where a syntax error would not
+      # surface until several minutes into a docker build.
+      - name: Check the vendored 6.205 installer parses
+        run: bash -n docker/install_6205.sh

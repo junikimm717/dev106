@@ -231,3 +231,97 @@ COPY ./home /home/dev106
 
 ENV DEV_CHOWN="/nvim"
 ENV DEV_CHOWNEXCLUDE="/nvim/build/pkgs"
+
+
+##############################
+# Base mit_6205 image
+# Open-source FPGA toolchain for 6.2050. Vivado is NOT installed; builds go
+# to the course's remote server through lab-bc.
+# https://fpga.mit.edu/6205/F26/documentation/vivado
+##############################
+
+FROM debian:trixie-slim AS mit_6205
+
+RUN apt-get update && \
+  apt-get install -y --no-install-recommends \
+  sudo git tar wget make perl ssh unzip xz-utils curl ca-certificates \
+  python3 && \
+  rm -rf /var/lib/apt/lists/*
+
+RUN echo "%dev106 ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/dev106 \
+ && chmod 0440 /etc/sudoers.d/dev106
+
+RUN ln -sfn python3 /usr/bin/python
+
+# The venv goes outside /home/dev106 because bootstrap chowns the home
+# directory on every start, and walking a venv full of pip packages each time
+# is slow. /opt is stable and read-only to the student.
+ENV VENV_6205=/opt/6205_python
+
+COPY docker/install_6205.sh /tmp/install_6205.sh
+
+# --no-gui: no X server here. --no-shell-rc: the alias is written below into
+# the student's profile instead of root's. --skip-selftest: the smoke test
+# wants a writable HOME, which does not exist until bootstrap runs.
+RUN HOME=/root VENV_DIR="$VENV_6205" \
+  /tmp/install_6205.sh --no-gui --no-shell-rc --skip-selftest && \
+  rm /tmp/install_6205.sh
+
+# The udev rule is useless inside the container (the kernel is the host's),
+# but dev106 --group-adds the host GID that owns the device node, so the
+# numeric group is what actually grants access.
+RUN groupadd --system plugdev 2>/dev/null || true
+
+# Activate the toolchain venv for every login shell, so `lab-bc`, `cocotb`,
+# and `openFPGALoader` are simply on PATH.
+RUN printf '%s\n' \
+  '# 6.205 toolchain' \
+  '. /opt/6205_python/bin/activate' \
+  > /etc/profile.d/6205.sh
+
+ENV PATH="/opt/6205_python/bin:${PATH}"
+
+COPY --from=builder /workspace/bootstrap /bootstrap
+
+WORKDIR /workspace
+
+ENTRYPOINT ["/bootstrap"]
+
+
+##############################
+# nvim image (6.2050)
+##############################
+
+FROM mit_6205 AS nvim_6205
+
+RUN mkdir /nvim && \
+  curl -L https://github.com/junikimm717/nvim2025/archive/master.tar.gz \
+  | tar -xz --strip-components=1 -C /nvim
+
+RUN <<EOF cat > /nvim/lua/configs/init.lua
+---@type Config
+return {
+  mason = {},
+  lazy = require("themes.kanagawa"),
+  treesitter = {
+    "json",
+    "markdown",
+    "gitignore",
+    "gitcommit",
+    "c",
+    "cpp",
+    "make",
+    "python",
+    "bash",
+    "verilog",
+  }
+}
+EOF
+
+RUN cd /nvim && make -j$(nproc)
+RUN /nvim/build/bin/setup-nvim
+
+COPY ./home /home/dev106
+
+ENV DEV_CHOWN="/nvim"
+ENV DEV_CHOWNEXCLUDE="/nvim/build/pkgs"
