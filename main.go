@@ -48,6 +48,10 @@ func newApp(allowNoRoot bool) (*App, error) {
 		}
 	}
 
+	if warning := cli.WorkspaceWarning(root); warning != "" {
+		fmt.Fprint(os.Stderr, warning)
+	}
+
 	binds, err := cli.BindMounts(config, root)
 	if err != nil {
 		if allowNoRoot {
