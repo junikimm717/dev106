@@ -87,7 +87,7 @@ func BindMounts(config *DevConfig, dir string) ([]string, error) {
 	if !stat.IsDir() {
 		return res, fmt.Errorf("%s is not a directory!", dir)
 	}
-	res = append(res, fmt.Sprintf("%s:%s:rw", dir, "/workspace"))
+	res = append(res, fmt.Sprintf("%s:%s:rw", dir, shared.CONTAINER_WORKSPACE))
 
 	// telerun credentials should be synced.
 	telerun := filepath.Join(home, ".telerun")

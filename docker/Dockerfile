@@ -53,6 +53,10 @@ RUN pip3 install --break-system-packages SQLAlchemy==1.4.54 opentuner
 
 COPY --from=builder /workspace/bootstrap /bootstrap
 
+# The repo root is bind-mounted here, so every image derived from this one
+# should drop the user into it rather than /.
+WORKDIR /workspace
+
 ENTRYPOINT ["/bootstrap"]
 
 
@@ -93,8 +97,6 @@ COPY ./home /home/dev106
 
 ENV DEV_CHOWN="/nvim"
 ENV DEV_CHOWNEXCLUDE="/nvim/build/pkgs"
-
-WORKDIR /workspace
 
 
 ##############################
@@ -187,6 +189,8 @@ EOF
 
 COPY --from=builder /workspace/bootstrap /bootstrap
 
+WORKDIR /workspace
+
 ENTRYPOINT ["/bootstrap"]
 
 
@@ -227,5 +231,3 @@ COPY ./home /home/dev106
 
 ENV DEV_CHOWN="/nvim"
 ENV DEV_CHOWNEXCLUDE="/nvim/build/pkgs"
-
-WORKDIR /workspace

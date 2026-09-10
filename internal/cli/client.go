@@ -62,7 +62,8 @@ func (d *DevClient) Run(config *DevConfig, containerName string, binds []string,
 				fmt.Sprintf("DEV_UID=%s", u.Uid),
 				fmt.Sprintf("DEV_GID=%s", u.Gid),
 			},
-			Labels: ContainerLabels(root),
+			Labels:     ContainerLabels(root),
+			WorkingDir: shared.CONTAINER_WORKSPACE,
 		},
 		Platform: &platform,
 		HostConfig: &container.HostConfig{
@@ -111,6 +112,7 @@ func (d *DevClient) Exec(containerName string) error {
 		containerName,
 		dockerClient.ExecCreateOptions{
 			User:         userSpec,
+			WorkingDir:   shared.CONTAINER_WORKSPACE,
 			Cmd:          []string{"/bin/bash", "-l"},
 			TTY:          true,
 			AttachStdin:  true,
@@ -194,6 +196,7 @@ func (d *DevClient) ExecCmd(containerName string, cmd []string) error {
 		containerName,
 		dockerClient.ExecCreateOptions{
 			User:         userSpec,
+			WorkingDir:   shared.CONTAINER_WORKSPACE,
 			Cmd:          cmd,
 			AttachStdin:  true,
 			AttachStdout: true,
