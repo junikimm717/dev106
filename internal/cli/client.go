@@ -24,6 +24,20 @@ type DevClient struct {
 }
 
 func NewClient(ctx context.Context) (*DevClient, error) {
+	// Docker Desktop rewrites bind mount paths in an API proxy behind the
+	// distro's unix socket; tcp:// skips that proxy and the bind silently
+	// degrades to an empty volume rather than failing.
+	if host := os.Getenv("DOCKER_HOST"); strings.HasPrefix(host, "tcp://") && IsWSL() {
+		fmt.Fprintf(os.Stderr, `warning: DOCKER_HOST is %s
+
+  On WSL, connecting over TCP bypasses Docker Desktop's bind mount
+  translation, so /workspace would come up empty instead of erroring.
+  Unless you mean to use a remote daemon, unset it:
+      unset DOCKER_HOST
+
+`, host)
+	}
+
 	client, err := dockerClient.New(dockerClient.FromEnv)
 	if err != nil {
 		return nil, fmt.Errorf("could not connect to Docker; is the daemon running?\n%w", err)
