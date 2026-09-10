@@ -4,6 +4,59 @@ Development containers and configuration for classwork.
 
 Currently supporting 6.106 and 6.181
 
+## Installation
+
+If you are lazy:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/junikimm717/dev106/master/install.sh | sh
+```
+
+Checks Docker, installs the binary, then runs `dev106 pull` to pick your course
+and download the image. macOS, Linux, and WSL2. Re-run it to upgrade. It
+explains what to do if anything is missing; `sh install.sh --help` lists the
+knobs.
+
+Or, from source:
+
+```bash
+go install github.com/junikimm717/dev106@latest
+```
+
+Either way you need Docker running. dev106 talks to the Docker socket directly
+and reads `$DOCKER_HOST`, but it does **not** read Docker *contexts*. Docker
+Desktop and OrbStack provide `unix:///var/run/docker.sock` and just work;
+
+If you're using colima, rancher desktop, or rootless docker, I assume you are
+serious and know what you are doing:
+```bash
+export DOCKER_HOST="unix://$HOME/.colima/default/docker.sock"  # colima
+```
+
+On Windows, run dev106 inside WSL2 rather than PowerShell, and keep your repos
+under your Linux home (`~`) instead of `/mnt/c`.
+
+The first run writes a config at `~/.config/dev106/config.toml` (or
+`$XDG_CONFIG_HOME/dev106/config.toml`) and then continues with the command you
+typed. On a TTY it asks whether you are taking 6.181 or 6.106; without a TTY it
+defaults to 6.181. If you cancel the picker (`q` or Ctrl-C), nothing is written
+and dev106 asks again the next time you run it. You can still edit the file
+afterward.
+
+```toml
+image = "ghcr.io/junikimm717/dev106/nvim_6181:latest"
+telerun = false
+# Use the host architecture (arm64/amd64). On for 6.181, off for 6.106.
+follow_host = true
+```
+
+**6.181** images (`nvim_6181:latest`, `mit_6181:latest`) are built for amd64 and
+arm64. They include QEMU 7.2+, gdb-multiarch, and `riscv64-linux-gnu` GCC/binutils.
+
+**6.106** images (`nvim:2.1.0`, `nvim:4.0-rc1`, `mit_6106`) are amd64-only; keep
+`follow_host = false` so they run under emulation on Apple Silicon.
+
+
 ## Features:
 
 1. `dev106` automatically detects your git repository root. You can invoke a
@@ -32,56 +85,6 @@ $ dev106 kill
 $ dev106 restart
 $ dev106 nuke
 ```
-
-## Installation
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/junikimm717/dev106/master/install.sh | sh
-```
-
-Checks Docker, installs the binary, then runs `dev106 pull` to pick your course
-and download the image. macOS, Linux, and WSL2. Re-run it to upgrade. It
-explains what to do if anything is missing; `sh install.sh --help` lists the
-knobs.
-
-Or, from source:
-
-```bash
-go install github.com/junikimm717/dev106@latest
-```
-
-Either way you need Docker running. dev106 talks to the Docker socket directly
-and reads `$DOCKER_HOST`, but it does **not** read Docker *contexts*. Docker
-Desktop and OrbStack provide `unix:///var/run/docker.sock` and just work;
-Colima, Rancher Desktop and rootless Docker only register a context, so export
-the endpoint yourself:
-
-```bash
-export DOCKER_HOST="unix://$HOME/.colima/default/docker.sock"  # colima
-```
-
-On Windows, run dev106 inside WSL2 rather than PowerShell, and keep your repos
-under your Linux home (`~`) instead of `/mnt/c`.
-
-The first run writes a config at `~/.config/dev106/config.toml` (or
-`$XDG_CONFIG_HOME/dev106/config.toml`) and then continues with the command you
-typed. On a TTY it asks whether you are taking 6.181 or 6.106; without a TTY it
-defaults to 6.181. If you cancel the picker (`q` or Ctrl-C), nothing is written
-and dev106 asks again the next time you run it. You can still edit the file
-afterward.
-
-```toml
-image = "ghcr.io/junikimm717/dev106/nvim_6181:latest"
-telerun = false
-# Use the host architecture (arm64/amd64). On for 6.181, off for 6.106.
-follow_host = true
-```
-
-**6.106** images (`nvim:2.1.0`, `nvim:4.0-rc1`, `mit_6106`) are amd64-only; keep
-`follow_host = false` so they run under emulation on Apple Silicon.
-
-**6.181** images (`nvim_6181:latest`, `mit_6181:latest`) are built for amd64 and
-arm64. They include QEMU 7.2+, gdb-multiarch, and `riscv64-linux-gnu` GCC/binutils.
 
 ## Container Bootstrapper
 

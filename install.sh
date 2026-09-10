@@ -86,6 +86,14 @@ is_wsl() {
   [ -f /proc/version ] && grep -qiE 'microsoft|wsl' /proc/version 2>/dev/null
 }
 
+wsl_distro_name() {
+  if [ -n "${WSL_DISTRO_NAME:-}" ]; then
+    echo "$WSL_DISTRO_NAME"
+  else
+    echo "<distro>"
+  fi
+}
+
 # ---------------------------------------------------------------- docker
 
 # dev106 talks to the Docker API socket directly; it never shells out to the
@@ -125,6 +133,24 @@ docker_ping() {
   esac
 }
 
+# Under WSL, Docker Desktop translates bind-mount paths in an API proxy injected
+# into the distro, sitting behind the distro's own unix socket. A DOCKER_HOST
+# pointing anywhere else (usually a stale tcp://localhost:2375 from a WSL1-era
+# tutorial) bypasses that proxy, and /workspace silently comes up empty.
+check_wsl_docker_host() {
+  is_wsl || return 0
+  [ -n "${DOCKER_HOST:-}" ] || return 0
+  case "$DOCKER_HOST" in
+    unix://*) return 0 ;;
+  esac
+  warn "DOCKER_HOST is set to $DOCKER_HOST"
+  say "  On WSL this bypasses Docker Desktop's bind-mount path translation, so"
+  say "  your repo would mount into the container empty. Unless you really mean"
+  say "  to use a remote daemon, unset it (and remove it from your shell rc):"
+  say "      unset DOCKER_HOST"
+  say ""
+}
+
 # Docker Desktop and OrbStack put a socket at the default path. Colima,
 # Rancher Desktop, Podman and rootless Docker instead register a *Docker
 # context*, which the CLI honours but dev106 does not. Surfacing the context
@@ -153,12 +179,15 @@ docker_help() {
   if is_wsl; then
     say "  You are on WSL. Pick one:"
     say "    - Docker Desktop (easiest): install it on Windows, then"
-    say "      Settings > Resources > WSL Integration > enable this distro."
+    say "      Settings > Resources > WSL Integration > enable this distro,"
+    say "      Apply & Restart, and open a NEW shell."
     say "      That exposes $DEFAULT_DOCKER_HOST inside the distro."
+    say "      If this distro isn't listed, it is probably WSL 1. From PowerShell:"
+    say "          wsl --set-version $(wsl_distro_name) 2"
     say "    - Docker Engine inside the distro:"
     say "      curl -fsSL https://get.docker.com | sh"
     say "      sudo usermod -aG docker \"\$USER\" && sudo service docker start"
-    say "      (log out and back in for the group change to apply)"
+    say "      (open a new shell for the group change to apply)"
   elif [ "$OS" = darwin ]; then
     say "  Install and start one of:"
     say "    - Docker Desktop: https://docs.docker.com/desktop/install/mac-install/"
@@ -180,6 +209,8 @@ check_docker() {
     return 0
   fi
 
+  check_wsl_docker_host
+
   rc=0
   docker_ping || rc=$?
   if [ "$rc" = 0 ]; then
@@ -193,6 +224,10 @@ check_docker() {
   else
     say "A Docker socket exists at $(docker_endpoint), but the daemon did not respond." >&2
     say "It may be stopped, or your user may not have permission to use it." >&2
+    if [ "$OS" = linux ]; then
+      say "  If it is permissions, add yourself to the docker group:" >&2
+      say "      sudo usermod -aG docker \"\$USER\" && newgrp docker" >&2
+    fi
   fi
   docker_help >&2
   say "" >&2
