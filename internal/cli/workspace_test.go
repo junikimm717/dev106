@@ -10,6 +10,32 @@ const (
 	testMagicBtrfs = 0x9123683E
 )
 
+// Anything that is not a Windows drive or a network share must stay silent,
+// including filesystems this code has never heard of.
+func TestLocalFilesystemsAreNeverFlagged(t *testing.T) {
+	local := map[string]int64{
+		"ext4":    0xEF53,
+		"btrfs":   0x9123683E,
+		"xfs":     0x58465342,
+		"zfs":     0x2FC12FC1,
+		"f2fs":    0xF2F52010,
+		"tmpfs":   0x01021994,
+		"overlay": 0x794C7630,
+		"vfat":    0x4D44,
+		"unknown": 0x1BADCAFE,
+	}
+
+	for name, magic := range local {
+		for _, wsl := range []bool{false, true} {
+			for _, root := range []string{"/home/x/repo", "/mnt/c/repo", "/Users/x/repo"} {
+				if got := workspaceAdvice(magic, wsl, root); got != "" {
+					t.Errorf("%s (wsl=%v, root=%s) should not warn, got:\n%s", name, wsl, root, got)
+				}
+			}
+		}
+	}
+}
+
 func TestWorkspaceAdvice(t *testing.T) {
 	cases := []struct {
 		name   string
@@ -37,6 +63,12 @@ func TestWorkspaceAdvice(t *testing.T) {
 		// Plain FUSE off /mnt (sshfs, gocryptfs) is not our problem.
 		{"fuse outside /mnt is not flagged", magicFUSE, true, "/home/x/repo", ""},
 		{"fuse without wsl is not flagged", magicFUSE, false, "/mnt/c/repo", ""},
+
+		// /mnt/<name> is only a Windows drive when <name> is a drive letter.
+		{"fuse under a named /mnt is not a drive", magicFUSE, true, "/mnt/sshfs-host/repo", ""},
+		{"fuse under /mnt/wsl is not a drive", magicFUSE, true, "/mnt/wsl/scratch", ""},
+		{"drive letter root is a drive", magicFUSE, true, "/mnt/d", "Windows drive"},
+		{"drive letter with path is a drive", magicFUSE, true, "/mnt/d/repo", "Windows drive"},
 	}
 
 	for _, tc := range cases {
@@ -55,5 +87,21 @@ func TestWorkspaceAdvice(t *testing.T) {
 				t.Fatalf("warning should name the path %q:\n%s", tc.root, got)
 			}
 		})
+	}
+}
+
+func TestWindowsDrivePath(t *testing.T) {
+	drives := []string{"/mnt/c", "/mnt/c/repo", "/mnt/d/a/b", "/mnt/C/repo"}
+	others := []string{"/mnt", "/mnt/", "/mnt/wsl/x", "/mnt/sshfs-host", "/home/x", "/mnt/1/x"}
+
+	for _, p := range drives {
+		if !isWindowsDrivePath(p) {
+			t.Errorf("%s should be a Windows drive path", p)
+		}
+	}
+	for _, p := range others {
+		if isWindowsDrivePath(p) {
+			t.Errorf("%s should not be a Windows drive path", p)
+		}
 	}
 }
