@@ -35,3 +35,7 @@ go.work.sum
 ./bootstrap
 ./dev106
 *.md
+
+# ...but the 6.205 stage installs its toolchain from this script, so it has
+# to stay in the build context.
+!docker/install_6205.sh

@@ -13,8 +13,11 @@ type courseOption struct {
 	Image      string
 	FollowHost bool
 	Telerun    bool
+	LabBC      bool
+	USB        bool
 }
 
+// The first entry is the default when there is no TTY to ask on.
 var courseOptions = []courseOption{
 	{
 		Name:       "6.181",
@@ -29,6 +32,15 @@ var courseOptions = []courseOption{
 		Image:      "ghcr.io/junikimm717/dev106/mit_6106:2.1.0",
 		FollowHost: false,
 		Telerun:    true,
+	},
+	{
+		Name:       "6.205",
+		Label:      "6.2050 Digital Systems Laboratory",
+		Image:      "ghcr.io/junikimm717/dev106/mit_6205:latest",
+		FollowHost: true,
+		Telerun:    false,
+		LabBC:      true,
+		USB:        true,
 	},
 }
 

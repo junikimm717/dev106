@@ -21,7 +21,19 @@ type App struct {
 // Function that generates a new app. It contains an option for whether it is
 // strictly required that we are in some Git repository.
 func newApp(allowNoRoot bool) (*App, error) {
-	config, err := cli.LoadConfig()
+	wd, err := os.Getwd()
+	if err != nil {
+		return nil, err
+	}
+
+	// Root first, so a .dev106.toml there can override the global config.
+	// rootErr is deferred so commands tolerating no repo still get a config.
+	root, rootErr := cli.FindRoot(wd)
+	if rootErr != nil {
+		root = ""
+	}
+
+	config, err := cli.LoadConfig(root)
 	if err != nil {
 		return nil, err
 	}
@@ -31,25 +43,29 @@ func newApp(allowNoRoot bool) (*App, error) {
 		return nil, err
 	}
 
-	wd, err := os.Getwd()
-	if err != nil {
-		return nil, err
-	}
-
-	root, err := cli.FindRoot(wd)
-	if err != nil {
+	if rootErr != nil {
 		if allowNoRoot {
 			return &App{
 				Config: config,
 				Client: client,
 			}, nil
 		} else {
-			return nil, err
+			return nil, rootErr
 		}
 	}
 
 	if warning := cli.WorkspaceWarning(root); warning != "" {
 		fmt.Fprint(os.Stderr, warning)
+	}
+
+	// Only actionable warnings repeat; an unusable daemon is said once, at
+	// container creation.
+	if config.USB {
+		if devices := client.USB(); devices.Supported {
+			if warning := cli.USBWarning(devices); warning != "" {
+				fmt.Fprint(os.Stderr, warning)
+			}
+		}
 	}
 
 	binds, err := cli.BindMounts(config, root)
@@ -103,6 +119,7 @@ func main() {
 	rootCmd.AddCommand(execCmd())
 	rootCmd.AddCommand(listCmd())
 	rootCmd.AddCommand(nukeCmd())
+	rootCmd.AddCommand(configCmd())
 
 	if err := rootCmd.Execute(); err != nil {
 		var exitErr *cli.ExitError

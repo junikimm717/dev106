@@ -99,5 +99,22 @@ func BindMounts(config *DevConfig, dir string) ([]string, error) {
 		res = append(res, fmt.Sprintf("%s:%s/.telerun:rw", telerun, shared.CONTAINER_HOME))
 	}
 
+	// Keeping lab-bc's config dir on the host means logging in once.
+	if config.LabBC {
+		labbc := LabBCConfigDir(home)
+		if err := os.MkdirAll(labbc, 0o700); err != nil {
+			return res, err
+		}
+		res = append(res, fmt.Sprintf("%s:%s/.config/lab-bc:rw", labbc, shared.CONTAINER_HOME))
+	}
+
 	return res, nil
+}
+
+// LabBCConfigDir follows XDG_CONFIG_HOME, matching run_6205.sh.
+func LabBCConfigDir(home string) string {
+	if xdg := os.Getenv("XDG_CONFIG_HOME"); xdg != "" {
+		return filepath.Join(xdg, "lab-bc")
+	}
+	return filepath.Join(home, ".config", "lab-bc")
 }

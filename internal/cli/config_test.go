@@ -73,7 +73,7 @@ func TestLoadConfigCreatesAndContinues(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", dir)
 
-	cfg, err := LoadConfig()
+	cfg, err := LoadConfig("")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -91,7 +91,7 @@ func TestLoadConfigCreatesAndContinues(t *testing.T) {
 	}
 
 	// Second load must not rewrite or fail.
-	again, err := LoadConfig()
+	again, err := LoadConfig("")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -111,7 +111,7 @@ func TestLoadConfigReportsPathOnBadTOML(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, err := LoadConfig()
+	_, err := LoadConfig("")
 	if err == nil {
 		t.Fatal("expected parse error")
 	}
@@ -131,11 +131,122 @@ func TestLoadConfigEmptyImage(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, err := LoadConfig()
+	_, err := LoadConfig("")
 	if err == nil {
 		t.Fatal("expected empty image error")
 	}
 	if !strings.Contains(err.Error(), path) {
 		t.Fatalf("error should include path, got %v", err)
+	}
+}
+
+func writeConfig(t *testing.T, path, contents string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(contents), 0644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestRepoConfigOverlaysGlobal(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", dir)
+	writeConfig(t, filepath.Join(dir, "dev106", "config.toml"),
+		"image = \"mit_6181\"\ntelerun = false\nfollow_host = true\n")
+
+	root := t.TempDir()
+	writeConfig(t, filepath.Join(root, RepoConfigName),
+		"image = \"mit_6205\"\nlabbc = true\nusb = true\n")
+
+	cfg, err := LoadConfig(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if cfg.Image != "mit_6205" {
+		t.Fatalf("repo image should win, got %q", cfg.Image)
+	}
+	if !cfg.LabBC || !cfg.USB {
+		t.Fatalf("repo keys not applied: %+v", cfg)
+	}
+	// Untouched by the repo file, so the global value has to survive.
+	if cfg.FollowHost == nil || !*cfg.FollowHost {
+		t.Fatal("follow_host from the global config was lost")
+	}
+	if cfg.RepoPath == "" {
+		t.Fatal("RepoPath should record the override")
+	}
+}
+
+func TestRepoConfigAbsentKeepsGlobal(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", dir)
+	writeConfig(t, filepath.Join(dir, "dev106", "config.toml"),
+		"image = \"mit_6181\"\ntelerun = false\n")
+
+	cfg, err := LoadConfig(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Image != "mit_6181" {
+		t.Fatalf("global image should stand, got %q", cfg.Image)
+	}
+	if cfg.RepoPath != "" {
+		t.Fatalf("RepoPath should be empty, got %q", cfg.RepoPath)
+	}
+	if cfg.LabBC || cfg.USB {
+		t.Fatalf("6.205 keys should default off: %+v", cfg)
+	}
+}
+
+func TestRepoConfigBadTOMLNamesTheRepoFile(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", dir)
+	writeConfig(t, filepath.Join(dir, "dev106", "config.toml"), "image = \"mit_6181\"\n")
+
+	root := t.TempDir()
+	repoPath := filepath.Join(root, RepoConfigName)
+	writeConfig(t, repoPath, "image = [\n")
+
+	_, err := LoadConfig(root)
+	if err == nil {
+		t.Fatal("expected a parse error")
+	}
+	if !strings.Contains(err.Error(), repoPath) {
+		t.Fatalf("error should name the repo file, got %v", err)
+	}
+}
+
+// The default when there is no TTY to ask on must stay 6.1810.
+func TestDefaultCourseIs6181(t *testing.T) {
+	if got := defaultCourse().Name; got != "6.181" {
+		t.Fatalf("default course = %q, want 6.181", got)
+	}
+	if defaultCourse().USB || defaultCourse().LabBC {
+		t.Fatal("the 6.181 default must not enable usb or labbc")
+	}
+}
+
+func TestCourse6205Defaults(t *testing.T) {
+	var course courseOption
+	for _, c := range courseOptions {
+		if c.Name == "6.205" {
+			course = c
+		}
+	}
+	if course.Name == "" {
+		t.Fatal("6.205 course option missing")
+	}
+	if !course.LabBC || !course.USB {
+		t.Fatalf("6.205 should enable labbc and usb: %+v", course)
+	}
+
+	generated := defaultConfigContents(course)
+	for _, want := range []string{"labbc = true", "usb = true", RepoConfigName} {
+		if !strings.Contains(generated, want) {
+			t.Fatalf("generated 6.205 config missing %q:\n%s", want, generated)
+		}
 	}
 }
