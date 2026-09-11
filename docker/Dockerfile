@@ -128,11 +128,33 @@ RUN echo "%dev106 ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/dev106 \
 
 RUN ln -sfn python3 /usr/bin/python
 
+# `make qemu-gdb` prints "Now run 'gdb' in another window", but plain gdb is
+# native-only and cannot set a riscv:rv64 target; it is here as a dependency
+# of gdb-multiarch, which can. /usr/local/bin wins on PATH, and gdb-multiarch
+# still autodetects the native architecture, so nothing is lost.
+RUN ln -sf /usr/bin/gdb-multiarch /usr/local/bin/gdb
+
+# The same target writes a .gdbinit at the repo root carrying the per-user
+# port and `target remote`. gdb declines to auto-load it, leaving you in a
+# gdb attached to nothing, so trust the one directory the repo is mounted at.
+RUN printf 'add-auto-load-safe-path /workspace\n' >> /etc/gdb/gdbinit
+
 # Fail the build if the course-required tools are missing or too old.
 RUN qemu-system-riscv64 --version && \
   riscv64-linux-gnu-gcc --version && \
   gdb-multiarch --version && \
   clangd --version
+
+# The two fixes above are the whole xv6 debugging path, so assert them rather
+# than trusting that a package upgrade left them alone.
+RUN gdb -batch -ex 'set architecture riscv:rv64' && \
+  mkdir -p /workspace && \
+  printf 'set architecture riscv:rv64\n' > /workspace/.gdbinit && \
+  cd /workspace && \
+  gdb -batch -ex 'show architecture' 2>&1 | tee /tmp/gdbcheck && \
+  ! grep -qi declined /tmp/gdbcheck && \
+  grep -q 'riscv:rv64' /tmp/gdbcheck && \
+  rm /workspace/.gdbinit /tmp/gdbcheck
 
 # Bake xv6 Makefile CFLAGS + RISC-V gcc builtins into clangd's user config
 # so any image based on mit_6181 (nvim, VS Code, etc.) gets the same LSP.
