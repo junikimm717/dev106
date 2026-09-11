@@ -116,14 +116,14 @@ consequences:
   precision of 1e0"*. Put `` `timescale 1ns / 1ps `` at the top of your
   sources.
 
-vicoco is **not** installed: it pins `cocotb==1.9.2` on every released branch,
-so it cannot coexist with 2.x. Its `upgrade_cocotb_2_0` branch requires
-`>=2.0.0` but is unmerged as of this writing. vicoco only adds Vivado xsim as
-a simulator; iverilog is unaffected. If you need it:
-
-```bash
-sudo pip install 'cocotb==1.9.2' git+https://github.com/kiran-vuksanaj/vicoco.git@stable
-```
+[vicoco](https://fpga.mit.edu/6205/F26/documentation/vicoco) is installed, but
+**not from the branch its docs name.** The documented
+`pip install git+...@stable` still pins `cocotb==1.9.2`, so following it
+verbatim either fails to resolve or drags cocotb back to a version where the
+`cocotb_tools.runner` import the course boilerplate uses does not exist. The
+image installs the `upgrade_cocotb_2_0` branch instead, pinned to a commit
+since it is unmerged and moving. `from vicoco.vivado_runner import get_runner`
+works as documented. Revert to `@stable` once upstream merges.
 
 All of it lives in a venv at `/opt/6205_python`, owned by root so that
 starting a container does not mean chowning every file in it. Adding a
