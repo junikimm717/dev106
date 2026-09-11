@@ -493,7 +493,10 @@ func TestOrbSerialPortsWithoutOrb(t *testing.T) {
 // The point of the profile: an Arduino must not be described as an FPGA, and
 // must not be handed openFPGALoader's udev rules or a bitstream command.
 func TestNonFPGAProfileDropsFPGAVocabulary(t *testing.T) {
-	arduino := Profile("Arduino", []USBID{{"2341", "0043"}})
+	arduino, err := Profile("generic", "Arduino", []USBID{{"2341", "0043"}})
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	cases := []USBDevices{
 		{Mode: USBHostDevices, Supported: true, BusDir: true, Profile: arduino},
@@ -526,7 +529,10 @@ func TestNonFPGAProfileDropsFPGAVocabulary(t *testing.T) {
 // Overriding ids alone is the "my programmer is not in the list" case, so the
 // FPGA wording and the openFPGALoader udev link should survive.
 func TestIDOverrideAloneKeepsFPGAProfile(t *testing.T) {
-	p := Profile("", []USBID{{"1d50", "6018"}})
+	p, err := Profile("", "", []USBID{{"1d50", "6018"}})
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	if p.Label != FPGAProfile.Label {
 		t.Fatalf("Label = %q, want the FPGA default", p.Label)
@@ -539,15 +545,58 @@ func TestIDOverrideAloneKeepsFPGAProfile(t *testing.T) {
 	}
 }
 
-// A custom label means different hardware, so FPGA-specific hints must go.
-func TestLabelOverrideDropsFPGAHints(t *testing.T) {
-	p := Profile("Arduino", nil)
+// Overriding the label must change the label and nothing else. Inferring
+// "this is no longer an FPGA" from a renamed label would silently drop the
+// udev rule from someone who just wanted a more specific name.
+func TestLabelOverrideChangesOnlyTheLabel(t *testing.T) {
+	p, err := Profile("", "FPGA board (Urbana rev C)", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if p.Label != "FPGA board (Urbana rev C)" {
+		t.Fatalf("Label = %q", p.Label)
+	}
+	if p.UdevRules != FPGAProfile.UdevRules || p.FlashExample != FPGAProfile.FlashExample {
+		t.Fatal("renaming the label must not strip the profile's tool hints")
+	}
+}
+
+// Dropping the FPGA hints is what choosing another profile is for.
+func TestGenericProfileCarriesNoToolHints(t *testing.T) {
+	p, err := Profile("generic", "", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	if p.UdevRules != "" || p.FlashExample != "" {
-		t.Fatal("openFPGALoader hints must not follow a relabelled device")
+		t.Fatal("the generic profile should carry no tool-specific advice")
 	}
-	if len(p.IDs) == 0 {
-		t.Fatal("a label alone should keep the default ids")
+	if !p.NeedsIDs() {
+		t.Fatal("generic has no ids of its own, and should say so")
+	}
+}
+
+// A typo in usb_profile is reported, not silently honoured or fatal.
+func TestUnknownProfileNameFallsBackAndReports(t *testing.T) {
+	p, err := Profile("fpgaa", "", nil)
+	if err == nil {
+		t.Fatal("an unknown profile name should be reported")
+	}
+	if p.Label != FPGAProfile.Label {
+		t.Fatalf("should fall back to the default profile, got %q", p.Label)
+	}
+	if !strings.Contains(err.Error(), "fpga") || !strings.Contains(err.Error(), "generic") {
+		t.Fatalf("the error should list what is available: %v", err)
+	}
+}
+
+// A named profile with no ids must not silently start hunting for FPGAs.
+func TestGenericProfileDoesNotInheritFPGAIDs(t *testing.T) {
+	u := DetectUSB(USBHostDevices, DaemonIdentity{OperatingSystem: "Ubuntu 24.04.1 LTS"}, GenericProfile)
+
+	if len(u.Profile.IDs) != 0 {
+		t.Fatalf("generic should stay empty until configured, got %v", u.Profile.IDs)
 	}
 }
 

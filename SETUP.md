@@ -219,16 +219,25 @@ knows what is on the other end. Only the *wording* assumed an FPGA. Set a
 label and dev106 stops talking about bitstreams:
 
 ```toml
-usb        = true
-usb_ids    = ["2341:0043"]
-usb_label  = "Arduino"
+usb         = true
+usb_profile = "generic"
+usb_ids     = ["2341:0043"]
+usb_label   = "Arduino"
 ```
 
-Setting `usb_label` means the hardware is not an FPGA board, so the
-openFPGALoader-specific advice — its udev rules file, the sample flash
-command — is dropped rather than shown to someone holding an Arduino.
-Overriding `usb_ids` alone keeps the FPGA wording, since the common case
-there is adding a programmer the built-in list misses.
+`usb_profile` picks a built-in profile: `fpga` (the default) or `generic`.
+The profile decides the tool-specific advice — `fpga` offers openFPGALoader's
+udev rules and a sample flash command, `generic` offers neither, because
+there is nothing sensible to suggest for hardware dev106 knows nothing about.
+
+`usb_ids` and `usb_label` are plain overrides: each changes exactly the field
+it names and nothing else. In particular, renaming the label to
+`"FPGA board (Urbana rev C)"` keeps the openFPGALoader advice — the profile
+decides that, not the label. Nothing is inferred from what you happen to set.
+
+Adding a new class of hardware means adding an entry to the profile registry
+in `internal/host/usb.go`, with its own label, ids and tool hints, rather than
+editing the code that prints warnings.
 
 What a new device still needs is its own tooling in the image: flashing AVR
 means `avrdude`, which is a new stage in `docker/Dockerfile` alongside

@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/junikimm717/dev106/internal/config"
 	"github.com/junikimm717/dev106/internal/host"
@@ -189,13 +190,25 @@ func configCmd() *cobra.Command {
 			// The effective profile, not the raw strings: a malformed entry
 			// is dropped with a warning and must not look like it is in use.
 			ids, _ := host.ParseUSBIDs(c.USBIDs)
-			profile := host.Profile(c.USBLabel, ids)
+			profile, profileErr := host.Profile(c.USBProfile, c.USBLabel, ids)
+			name := c.USBProfile
+			if name == "" {
+				name = host.DefaultProfileName + "  (default)"
+			}
+			if profileErr != nil {
+				name = fmt.Sprintf("%s  (unknown, using %s)", c.USBProfile, host.DefaultProfileName)
+			}
 			builtin := ""
 			if len(ids) == 0 {
-				builtin = "  (built-in)"
+				builtin = "  (from profile)"
 			}
+			fmt.Printf("usb_profile  = %s\n", name)
 			fmt.Printf("usb_label    = %q\n", profile.Label)
 			fmt.Printf("usb_ids      = %s%s\n", host.FormatUSBIDs(profile.IDs), builtin)
+			if profile.NeedsIDs() {
+				fmt.Printf("             ^ matches nothing until usb_ids is set\n")
+			}
+			fmt.Printf("             available profiles: %s\n", strings.Join(host.ProfileNames(), ", "))
 			return nil
 		},
 	}

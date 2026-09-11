@@ -84,6 +84,15 @@ func (h *fakeHost) addSerial(t *testing.T, name string) string {
 	return node
 }
 
+func mustProfile(t *testing.T, name, label string, ids []USBID) DeviceProfile {
+	t.Helper()
+	p, err := Profile(name, label, ids)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return p
+}
+
 func currentGID(t *testing.T) int {
 	t.Helper()
 	return syscall.Getgid()
@@ -115,7 +124,7 @@ func TestDetectUSBHonoursConfiguredIDs(t *testing.T) {
 	want := h.addUSBDevice(t, "1-5", "1d50", "6018", 1, 11)
 
 	got := DetectUSB(USBHostDevices, DaemonIdentity{OperatingSystem: "Ubuntu 24.04.1 LTS"},
-		Profile("", []USBID{{"1d50", "6018"}}))
+		mustProfile(t, "", "", []USBID{{"1d50", "6018"}}))
 
 	if got.DeviceNode != want {
 		t.Fatalf("DeviceNode = %q, want %q", got.DeviceNode, want)

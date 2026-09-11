@@ -43,7 +43,7 @@ func New(ctx context.Context, cfg *config.DevConfig) (*DevClient, error) {
 	// A typo here must not stop a shell opening, so report it and carry on
 	// with whatever parsed.
 	var ids []host.USBID
-	label := ""
+	label, name := "", ""
 	if cfg != nil {
 		var bad []string
 		ids, bad = host.ParseUSBIDs(cfg.USBIDs)
@@ -51,12 +51,22 @@ func New(ctx context.Context, cfg *config.DevConfig) (*DevClient, error) {
 			fmt.Fprintf(os.Stderr, "warning: ignoring malformed usb_ids entry %q; expected \"vid:pid\"\n", entry)
 		}
 		label = cfg.USBLabel
+		name = cfg.USBProfile
+	}
+
+	profile, err := host.Profile(name, label, ids)
+	if err != nil {
+		// An unknown profile name is a typo, not a reason to refuse a shell.
+		fmt.Fprintf(os.Stderr, "warning: %v; using %q\n", err, host.DefaultProfileName)
+	}
+	if profile.NeedsIDs() {
+		fmt.Fprintf(os.Stderr, "warning: usb_profile %q matches nothing until you set usb_ids\n", name)
 	}
 
 	return &DevClient{
 		client:  client,
 		ctx:     ctx,
-		profile: host.Profile(label, ids),
+		profile: profile,
 	}, nil
 }
 

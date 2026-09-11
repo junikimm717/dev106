@@ -1,8 +1,10 @@
 package host
 
 import (
+	"fmt"
 	"os/exec"
 	"runtime"
+	"sort"
 	"strings"
 )
 
@@ -54,24 +56,61 @@ var FPGAProfile = DeviceProfile{
 	FlashExample: "openFPGALoader -b urbana build/obj/final.bit",
 }
 
-// Profile builds the effective profile from config. Overriding ids alone
-// keeps the FPGA wording, since the common case is adding a programmer the
-// default list misses. A custom label means genuinely different hardware, so
-// the openFPGALoader specifics stop applying and are dropped rather than
-// printed at someone holding an Arduino.
-func Profile(label string, ids []USBID) DeviceProfile {
-	p := FPGAProfile
+// GenericProfile is hardware dev106 knows nothing about beyond its ids. It
+// carries no tool-specific advice, because there is none to give.
+var GenericProfile = DeviceProfile{
+	Label:    "USB device",
+	Fallback: "Everything that does not need the device works normally.",
+}
+
+// Profiles is the registry. Supporting a new class of hardware means adding
+// an entry here -- with its own label, ids and tool hints -- not editing the
+// logic that prints warnings.
+var Profiles = map[string]DeviceProfile{
+	"fpga":    FPGAProfile,
+	"generic": GenericProfile,
+}
+
+// DefaultProfileName is what a config without usb_profile gets.
+const DefaultProfileName = "fpga"
+
+// Profile resolves the named profile and applies field overrides. Nothing is
+// inferred: a label override changes the label and only the label. Deciding
+// "is this still an FPGA?" from whether some unrelated field was set is the
+// kind of hidden rule that makes a config unpredictable -- pick the profile
+// explicitly instead.
+func Profile(name, label string, ids []USBID) (DeviceProfile, error) {
+	if name == "" {
+		name = DefaultProfileName
+	}
+	p, ok := Profiles[name]
+	if !ok {
+		return Profiles[DefaultProfileName], fmt.Errorf("unknown usb_profile %q; known profiles are %s",
+			name, strings.Join(ProfileNames(), ", "))
+	}
 	if len(ids) > 0 {
 		p.IDs = ids
 	}
 	if label != "" {
 		p.Label = label
-		p.UdevRules = ""
-		p.FlashExample = ""
-		p.Fallback = "Everything that does not need the device works normally."
 	}
-	return p
+	return p, nil
 }
+
+// ProfileNames lists the registry, sorted, for error messages and `config`.
+func ProfileNames() []string {
+	names := make([]string, 0, len(Profiles))
+	for name := range Profiles {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
+}
+
+// NeedsIDs reports a profile that cannot match anything until the config
+// names its hardware, so the caller can say so rather than silently finding
+// nothing forever.
+func (p DeviceProfile) NeedsIDs() bool { return len(p.IDs) == 0 }
 
 // ParseUSBIDs reads "vid:pid" strings from config. Malformed entries are
 // returned rather than rejected, so one typo cannot stop a shell opening.
@@ -116,9 +155,6 @@ func usbIDsOrDefault(ids []USBID) []USBID {
 func profileOrDefault(p DeviceProfile) DeviceProfile {
 	if p.Label == "" && len(p.IDs) == 0 {
 		return FPGAProfile
-	}
-	if len(p.IDs) == 0 {
-		p.IDs = DefaultUSBIDs
 	}
 	if p.Label == "" {
 		p.Label = FPGAProfile.Label
@@ -277,7 +313,10 @@ func Detect(id DaemonIdentity, p DeviceProfile) USBDevices {
 
 // DetectUSB reports what the daemon can hand a container.
 func DetectUSB(mode DaemonUSBMode, id DaemonIdentity, p DeviceProfile) USBDevices {
-	if len(p.IDs) == 0 {
+	// Only a wholly unset profile falls back. A named profile with no ids is
+	// a config that has not said what its hardware is, and quietly hunting
+	// for FPGAs on its behalf would be a lie.
+	if p.Label == "" && len(p.IDs) == 0 {
 		p = FPGAProfile
 	}
 	ids := p.IDs

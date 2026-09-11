@@ -29,9 +29,13 @@ type DevConfig struct {
 	// Empty means the defaults.
 	USBIDs []string `toml:"usb_ids"`
 
-	// USBLabel names the hardware in warnings. Setting it means the device
-	// is not an FPGA board, so the openFPGALoader-specific advice is dropped.
+	// USBLabel overrides the profile's label in warnings. It changes the
+	// label and nothing else.
 	USBLabel string `toml:"usb_label"`
+
+	// USBProfile selects a built-in device profile ("fpga", "generic").
+	// Empty means the default.
+	USBProfile string `toml:"usb_profile"`
 
 	// Where the values came from, for `dev106 config`.
 	GlobalPath string `toml:"-"`
