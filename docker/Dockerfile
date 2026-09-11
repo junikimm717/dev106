@@ -242,9 +242,14 @@ ENV DEV_CHOWNEXCLUDE="/nvim/build/pkgs"
 
 FROM debian:trixie-slim AS mit_6205
 
+# verilator is not part of the course toolchain, but it is the only thing
+# here that elaborates the design: width mismatches, undriven and unused
+# signals, inferred latches. Icarus catches undeclared identifiers, verible
+# catches style. Neither catches a 8-bit value quietly truncated to 4.
 RUN apt-get update && \
   apt-get install -y --no-install-recommends \
   sudo git tar wget make perl ssh unzip xz-utils curl ca-certificates \
+  verilator \
   python3 && \
   rm -rf /var/lib/apt/lists/*
 
@@ -281,6 +286,11 @@ RUN printf '%s\n' \
 
 ENV PATH="/opt/6205_python/bin:${PATH}"
 
+# Editors resolve the interpreter from VIRTUAL_ENV, not from PATH. Neovim's
+# launcher prepends its own bundled python, so without this pyright reports
+# every cocotb import as unresolved.
+ENV VIRTUAL_ENV=/opt/6205_python
+
 COPY --from=builder /workspace/bootstrap /bootstrap
 
 WORKDIR /workspace
@@ -301,7 +311,20 @@ RUN mkdir /nvim && \
 RUN <<EOF cat > /nvim/lua/configs/init.lua
 ---@type Config
 return {
-  mason = {},
+  mason = {
+    -- Style and syntax. Catches blocking assignments in always_ff and case
+    -- statements with no default; cannot see undeclared signals or width
+    -- mismatches, since it parses rather than elaborates.
+    "verible",
+    -- Indexes the project for cross-module definitions, and shells out to
+    -- verilator for diagnostics, which is what actually catches the
+    -- expensive mistakes.
+    "svlangserver",
+    -- cocotb testbenches. pyright, not basedpyright: cocotb's dut handle is
+    -- dynamically typed, and strict mode buries real errors in noise.
+    "pyright",
+    "ruff",
+  },
   lazy = require("themes.kanagawa"),
   treesitter = {
     "json",
@@ -313,13 +336,21 @@ return {
     "make",
     "python",
     "bash",
-    "verilog",
+    -- The parser is named systemverilog and covers .v too; "verilog" is
+    -- silently skipped as an unknown language.
+    "systemverilog",
+    "tcl",
   }
 }
 EOF
 
 RUN cd /nvim && make -j$(nproc)
 RUN /nvim/build/bin/setup-nvim
+
+# The launcher prepends neovim's bundled python, which shadows the 6.205 venv:
+# pyright then calls every cocotb import unresolved, and :terminal gets the
+# wrong interpreter. Runs after setup-nvim so the build is unaffected.
+RUN sed -i '/^exec /i export PATH="/opt/6205_python/bin:$PATH"' /nvim/build/bin/nvim
 
 COPY ./home /home/dev106
 

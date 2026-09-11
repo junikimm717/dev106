@@ -160,6 +160,60 @@ the bitstream in the container and flash from a Linux host.
 None of this blocks you. Simulation (iverilog, cocotb) and `lab-bc build` need
 no board at all — only flashing and UART do.
 
+### Editor tooling
+
+The `nvim_6205` image ships verible, svlangserver, pyright, and ruff, with
+verilator behind svlangserver. If you use your own editor, the table below is
+the part worth copying — the tools matter more than the config.
+
+No single SystemVerilog tool catches everything, because most of them parse
+rather than elaborate. Measured against one file with five deliberate
+mistakes:
+
+| mistake | verible | iverilog | verilator |
+|---|---|---|---|
+| blocking assignment in `always_ff` | yes | no | yes |
+| `case` with no default (inferred latch) | yes | no | yes |
+| undeclared signal (`typo_signal`) | no | yes | yes |
+| instantiating a nonexistent module | no | yes | yes |
+| width mismatch (8-bit into `logic [3:0]`) | no | no | yes |
+
+**verilator does the heavy lifting.** `verilator --sv --lint-only -Wall` is
+the only one that elaborates, so it is the only one that sees width
+truncation, unused signal bits, and undriven logic. It is not part of the
+course toolchain; dev106 installs it anyway.
+
+**Language servers, ranked by how much they actually help:**
+
+- **svlangserver** — indexes the project for cross-module go-to-definition,
+  and shells out to `verilator --lint-only` for diagnostics. Installing it
+  without verilator on `PATH` gets you navigation and silence. npm package, so
+  it works on any architecture.
+- **verible** — ChipsAlliance. Style and syntax only, but its rules are good
+  ones and its messages explain themselves. Also gives you
+  `verible-verilog-format`. Prebuilt for linux x64 and arm64.
+- **svls** — uses svlint for diagnostics. Reasonable, but mason builds it from
+  source with cargo, so you need a Rust toolchain.
+- **veridian** — not in the mason registry; build it yourself.
+- **hdl_checker** — wraps ghdl/vcom/xvhdl. Useless unless you already have one
+  of those.
+- **slangd / mason's `slang`** — **not this one.** That is the NVIDIA *shading*
+  language. The SystemVerilog project also called slang is unrelated and is not
+  what these install.
+
+Running verible and svlangserver together is the useful combination: style
+rules from one, elaboration errors from the other. They overlap on a couple of
+rules, so expect the occasional doubled diagnostic.
+
+For Python, **pyright** plus **ruff**. Not basedpyright — cocotb's `dut` handle
+is dynamically typed, and strict mode reports a dozen unknown-type warnings on
+a trivial testbench, which buries the real errors.
+
+If your editor reports `Import "cocotb" could not be resolved`, it is resolving
+the wrong interpreter. The toolchain lives in a venv at `/opt/6205_python`, and
+the image sets `VIRTUAL_ENV` so editors find it; set that yourself if you are
+building your own image.
+
 ## Troubleshooting
 
 **`could not connect to Docker` / `Cannot connect to the Docker daemon`**
