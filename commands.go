@@ -186,13 +186,16 @@ func configCmd() *cobra.Command {
 			fmt.Printf("telerun      = %t\n", c.Telerun)
 			fmt.Printf("labbc        = %t\n", c.LabBC)
 			fmt.Printf("usb          = %t\n", c.USB)
-			// The effective list, not the raw strings: a malformed entry is
-			// dropped with a warning and must not look like it is in use.
-			if ids, _ := host.ParseUSBIDs(c.USBIDs); len(ids) > 0 {
-				fmt.Printf("usb_ids      = %s\n", host.FormatUSBIDs(ids))
-			} else {
-				fmt.Printf("usb_ids      = %s  (built-in)\n", host.FormatUSBIDs(host.DefaultUSBIDs))
+			// The effective profile, not the raw strings: a malformed entry
+			// is dropped with a warning and must not look like it is in use.
+			ids, _ := host.ParseUSBIDs(c.USBIDs)
+			profile := host.Profile(c.USBLabel, ids)
+			builtin := ""
+			if len(ids) == 0 {
+				builtin = "  (built-in)"
 			}
+			fmt.Printf("usb_label    = %q\n", profile.Label)
+			fmt.Printf("usb_ids      = %s%s\n", host.FormatUSBIDs(profile.IDs), builtin)
 			return nil
 		},
 	}

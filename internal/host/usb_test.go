@@ -8,7 +8,7 @@ import (
 )
 
 func TestUSBAdvice(t *testing.T) {
-	ready := USBDevices{Mode: USBHostDevices, Supported: true, BusDir: true, BoardNode: "/dev/bus/usb/001/007", BoardGID: 46}
+	ready := USBDevices{Mode: USBHostDevices, Supported: true, BusDir: true, DeviceNode: "/dev/bus/usb/001/007", DeviceGID: 46}
 
 	cases := []struct {
 		name     string
@@ -64,13 +64,13 @@ func TestUSBAdvice(t *testing.T) {
 			// was the bug: the note fired on every single start.
 			name: "orbstack with the board attached is silent",
 			devices: USBDevices{
-				Mode:          USBSharedVM,
-				Supported:     true,
-				BusDir:        true,
-				AttachKnown:   true,
-				BoardAttached: true,
-				BoardID:       "00100000",
-				Identity:      DaemonIdentity{OperatingSystem: "OrbStack"},
+				Mode:           USBSharedVM,
+				Supported:      true,
+				BusDir:         true,
+				AttachKnown:    true,
+				DeviceAttached: true,
+				DeviceID:       "00100000",
+				Identity:       DaemonIdentity{OperatingSystem: "OrbStack"},
 			},
 			platform: "Docker on macOS",
 			quiet:    true,
@@ -78,20 +78,20 @@ func TestUSBAdvice(t *testing.T) {
 		{
 			name: "orbstack with a detached board names the exact command",
 			devices: USBDevices{
-				Mode:        USBSharedVM,
-				Supported:   true,
-				BusDir:      true,
-				AttachKnown: true,
-				BoardID:     "00100000",
-				BoardVidPID: "0403:6010",
-				Identity:    DaemonIdentity{OperatingSystem: "OrbStack"},
+				Mode:         USBSharedVM,
+				Supported:    true,
+				BusDir:       true,
+				AttachKnown:  true,
+				DeviceID:     "00100000",
+				DeviceVidPID: "0403:6010",
+				Identity:     DaemonIdentity{OperatingSystem: "OrbStack"},
 			},
 			platform: "Docker on macOS",
 			want:     []string{"orb usb attach 00100000", "0403:6010", "lab-bc"},
 		},
 		{
 			name:     "root owned node points at the udev rule",
-			devices:  USBDevices{Mode: USBHostDevices, Supported: true, BusDir: true, BoardNode: "/dev/bus/usb/001/007", BoardGID: 0},
+			devices:  USBDevices{Mode: USBHostDevices, Supported: true, BusDir: true, DeviceNode: "/dev/bus/usb/001/007", DeviceGID: 0},
 			platform: "this host",
 			want:     []string{"owned by root", "99-openfpgaloader.rules", "udevadm"},
 		},
@@ -228,7 +228,7 @@ func TestSharedVMNeverReportsMissingBoard(t *testing.T) {
 	// the developer happens to have plugged in.
 	t.Setenv("PATH", t.TempDir())
 
-	u := DetectUSB(USBSharedVM, DaemonIdentity{OperatingSystem: "OrbStack"}, nil)
+	u := DetectUSB(USBSharedVM, DaemonIdentity{OperatingSystem: "OrbStack"}, FPGAProfile)
 
 	if u.Enumerable() {
 		t.Fatal("a shared-VM daemon is not enumerable from here")
@@ -242,14 +242,14 @@ func TestSharedVMNeverReportsMissingBoard(t *testing.T) {
 }
 
 func TestDetectUSBUnavailableTouchesNothing(t *testing.T) {
-	u := DetectUSB(USBUnavailable, DaemonIdentity{OperatingSystem: "Docker Desktop"}, nil)
-	if u.Supported || u.BusDir || u.BoardFound() || len(u.Serial) != 0 {
+	u := DetectUSB(USBUnavailable, DaemonIdentity{OperatingSystem: "Docker Desktop"}, FPGAProfile)
+	if u.Supported || u.BusDir || u.DeviceFound() || len(u.Serial) != 0 {
 		t.Fatalf("unavailable mode should be empty: %+v", u)
 	}
 }
 
 func TestStaleContainerAdvice(t *testing.T) {
-	board := USBDevices{Mode: USBHostDevices, Supported: true, BusDir: true, BoardNode: "/dev/bus/usb/001/007", BoardGID: 46}
+	board := USBDevices{Mode: USBHostDevices, Supported: true, BusDir: true, DeviceNode: "/dev/bus/usb/001/007", DeviceGID: 46}
 
 	if got := StaleContainerAdvice(board, false); !strings.Contains(got, "dev106 restart") {
 		t.Fatalf("board plugged in after creation should suggest restart, got %q", got)
@@ -419,9 +419,9 @@ func TestOrbBoard(t *testing.T) {
 			if ids == nil {
 				ids = DefaultUSBIDs
 			}
-			id, vidPID, attached, known := orbBoard(ids)
+			id, vidPID, attached, known := orbDevice(ids)
 			if id != tc.wantID || vidPID != tc.wantVidPID || attached != tc.wantAttached || known != tc.wantKnown {
-				t.Fatalf("orbBoard() = (%q, %q, %v, %v), want (%q, %q, %v, %v)",
+				t.Fatalf("orbDevice() = (%q, %q, %v, %v), want (%q, %q, %v, %v)",
 					id, vidPID, attached, known, tc.wantID, tc.wantVidPID, tc.wantAttached, tc.wantKnown)
 			}
 		})
@@ -450,8 +450,8 @@ func TestParseUSBIDs(t *testing.T) {
 func TestUnknownProgrammerDoesNotClaimDetached(t *testing.T) {
 	fakeOrb(t, "00200000  05ac:8103  Apple Keyboard  attached")
 
-	u := DetectUSB(USBSharedVM, DaemonIdentity{OperatingSystem: "OrbStack"}, nil)
-	if u.BoardDetached() {
+	u := DetectUSB(USBSharedVM, DaemonIdentity{OperatingSystem: "OrbStack"}, FPGAProfile)
+	if u.DeviceDetached() {
 		t.Fatal("an unrecognised device list is not evidence the board is detached")
 	}
 	got := usbAdvice(u, false, "Docker on macOS")
@@ -463,11 +463,11 @@ func TestUnknownProgrammerDoesNotClaimDetached(t *testing.T) {
 // Without orb we know nothing, which must not be mistaken for "detached".
 func TestOrbBoardWithoutOrb(t *testing.T) {
 	t.Setenv("PATH", t.TempDir())
-	if id, vidPID, attached, known := orbBoard(DefaultUSBIDs); id != "" || vidPID != "" || attached || known {
-		t.Fatalf("orbBoard() = (%q, %q, %v, %v), want empty and unknown", id, vidPID, attached, known)
+	if id, vidPID, attached, known := orbDevice(DefaultUSBIDs); id != "" || vidPID != "" || attached || known {
+		t.Fatalf("orbDevice() = (%q, %q, %v, %v), want empty and unknown", id, vidPID, attached, known)
 	}
-	u := DetectUSB(USBSharedVM, DaemonIdentity{OperatingSystem: "OrbStack"}, nil)
-	if u.BoardDetached() {
+	u := DetectUSB(USBSharedVM, DaemonIdentity{OperatingSystem: "OrbStack"}, FPGAProfile)
+	if u.DeviceDetached() {
 		t.Fatal("not being able to ask is not the same as detached")
 	}
 }
@@ -477,7 +477,7 @@ func TestOrbBoardWithoutOrb(t *testing.T) {
 // silently blocked on permissions.
 func TestSharedVMJoinsRootGroup(t *testing.T) {
 	t.Setenv("PATH", t.TempDir())
-	u := DetectUSB(USBSharedVM, DaemonIdentity{OperatingSystem: "OrbStack"}, nil)
+	u := DetectUSB(USBSharedVM, DaemonIdentity{OperatingSystem: "OrbStack"}, FPGAProfile)
 	if !containsString(u.GroupIDs, "0") {
 		t.Fatalf("shared VM should join the root group, got %v", u.GroupIDs)
 	}
@@ -487,5 +487,76 @@ func TestOrbSerialPortsWithoutOrb(t *testing.T) {
 	t.Setenv("PATH", t.TempDir())
 	if got := orbSerialPorts(); got != nil {
 		t.Fatalf("no orb binary should yield nothing, got %v", got)
+	}
+}
+
+// The point of the profile: an Arduino must not be described as an FPGA, and
+// must not be handed openFPGALoader's udev rules or a bitstream command.
+func TestNonFPGAProfileDropsFPGAVocabulary(t *testing.T) {
+	arduino := Profile("Arduino", []USBID{{"2341", "0043"}})
+
+	cases := []USBDevices{
+		{Mode: USBHostDevices, Supported: true, BusDir: true, Profile: arduino},
+		{Mode: USBHostDevices, Supported: true, BusDir: true, Profile: arduino,
+			DeviceNode: "/dev/bus/usb/001/007", DeviceGID: 0},
+		{Mode: USBUnavailable, Profile: arduino,
+			Identity: DaemonIdentity{OperatingSystem: "Docker Desktop"}},
+		{Mode: USBUnavailable, Profile: arduino},
+		{Mode: USBUnavailable, Profile: arduino, Identity: DaemonIdentity{Remote: true}},
+		{Mode: USBSharedVM, Supported: true, BusDir: true, Profile: arduino,
+			AttachKnown: true, DeviceID: "00100000", DeviceVidPID: "2341:0043"},
+	}
+
+	for _, u := range cases {
+		got := usbAdvice(u, false, "Docker on macOS")
+		if got == "" {
+			continue
+		}
+		for _, banned := range []string{"FPGA", "openFPGALoader", "bitstream", "lab-bc", "iverilog", "cocotb"} {
+			if strings.Contains(got, banned) {
+				t.Fatalf("advice for an Arduino mentions %q:\n%s", banned, got)
+			}
+		}
+		if !strings.Contains(got, "Arduino") {
+			t.Fatalf("advice should name the device:\n%s", got)
+		}
+	}
+}
+
+// Overriding ids alone is the "my programmer is not in the list" case, so the
+// FPGA wording and the openFPGALoader udev link should survive.
+func TestIDOverrideAloneKeepsFPGAProfile(t *testing.T) {
+	p := Profile("", []USBID{{"1d50", "6018"}})
+
+	if p.Label != FPGAProfile.Label {
+		t.Fatalf("Label = %q, want the FPGA default", p.Label)
+	}
+	if p.UdevRules == "" || p.FlashExample == "" {
+		t.Fatal("openFPGALoader hints should survive an id-only override")
+	}
+	if len(p.IDs) != 1 || p.IDs[0].String() != "1d50:6018" {
+		t.Fatalf("IDs = %v, want only the override", p.IDs)
+	}
+}
+
+// A custom label means different hardware, so FPGA-specific hints must go.
+func TestLabelOverrideDropsFPGAHints(t *testing.T) {
+	p := Profile("Arduino", nil)
+
+	if p.UdevRules != "" || p.FlashExample != "" {
+		t.Fatal("openFPGALoader hints must not follow a relabelled device")
+	}
+	if len(p.IDs) == 0 {
+		t.Fatal("a label alone should keep the default ids")
+	}
+}
+
+// A zero profile is an uninitialised struct, not a device with no name.
+func TestZeroProfileFallsBackWholesale(t *testing.T) {
+	got := usbAdvice(USBDevices{Mode: USBHostDevices, Supported: true, BusDir: true,
+		DeviceNode: "/dev/bus/usb/001/007", DeviceGID: 0}, false, "this host")
+
+	if !strings.Contains(got, "99-openfpgaloader.rules") {
+		t.Fatalf("an unset profile should behave exactly like FPGAProfile:\n%s", got)
 	}
 }

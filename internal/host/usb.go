@@ -27,6 +27,52 @@ var DefaultUSBIDs = []USBID{
 	{"0403", "6043"}, // FT4232HP
 }
 
+// DeviceProfile is everything about the hardware that is not plumbing. The
+// passthrough itself -- binding the bus, the cgroup rule, the group-add, the
+// serial mapping -- is device agnostic, so a new kind of board needs a
+// profile rather than new code.
+type DeviceProfile struct {
+	// Label names the hardware in prose: "FPGA board", "Arduino".
+	Label string
+	IDs   []USBID
+	// Fallback says what still works without the device, so a warning never
+	// reads as though nothing works.
+	Fallback string
+	// UdevRules links the vendor's rules file, empty when there is none to
+	// point at.
+	UdevRules string
+	// FlashExample is a sample command for "build here, flash elsewhere".
+	FlashExample string
+}
+
+// FPGAProfile is 6.205's board, and the default.
+var FPGAProfile = DeviceProfile{
+	Label:        "FPGA board",
+	IDs:          DefaultUSBIDs,
+	Fallback:     "Simulation (iverilog, cocotb) and remote builds (lab-bc) work normally.",
+	UdevRules:    "https://raw.githubusercontent.com/trabucayre/openFPGALoader/master/99-openfpgaloader.rules",
+	FlashExample: "openFPGALoader -b urbana build/obj/final.bit",
+}
+
+// Profile builds the effective profile from config. Overriding ids alone
+// keeps the FPGA wording, since the common case is adding a programmer the
+// default list misses. A custom label means genuinely different hardware, so
+// the openFPGALoader specifics stop applying and are dropped rather than
+// printed at someone holding an Arduino.
+func Profile(label string, ids []USBID) DeviceProfile {
+	p := FPGAProfile
+	if len(ids) > 0 {
+		p.IDs = ids
+	}
+	if label != "" {
+		p.Label = label
+		p.UdevRules = ""
+		p.FlashExample = ""
+		p.Fallback = "Everything that does not need the device works normally."
+	}
+	return p
+}
+
 // ParseUSBIDs reads "vid:pid" strings from config. Malformed entries are
 // returned rather than rejected, so one typo cannot stop a shell opening.
 func ParseUSBIDs(raw []string) (ids []USBID, bad []string) {
@@ -61,6 +107,26 @@ func usbIDsOrDefault(ids []USBID) []USBID {
 		return DefaultUSBIDs
 	}
 	return ids
+}
+
+// profileOrDefault guards zero-valued USBDevices built by callers and tests.
+// A wholly empty profile means nobody set one, so use the default rather than
+// patching field by field -- half a profile would print generic advice while
+// claiming to describe an FPGA board.
+func profileOrDefault(p DeviceProfile) DeviceProfile {
+	if p.Label == "" && len(p.IDs) == 0 {
+		return FPGAProfile
+	}
+	if len(p.IDs) == 0 {
+		p.IDs = DefaultUSBIDs
+	}
+	if p.Label == "" {
+		p.Label = FPGAProfile.Label
+	}
+	if p.Fallback == "" {
+		p.Fallback = FPGAProfile.Fallback
+	}
+	return p
 }
 
 func matchesID(vidPID string, ids []USBID) bool {
@@ -148,41 +214,52 @@ type USBDevices struct {
 	Supported bool
 	BusDir    bool
 
-	// BoardNode is the /dev/bus/usb/BBB/DDD node, empty when unplugged.
-	BoardNode string
-	// BoardGID 0 means root-only, which the container user cannot open.
-	BoardGID int
-	Serial   []string
+	// DeviceNode is the /dev/bus/usb/BBB/DDD node, empty when unplugged.
+	DeviceNode string
+	// DeviceGID 0 means root-only, which the container user cannot open.
+	DeviceGID int
+	Serial    []string
 	// GroupIDs own the nodes above, minus root.
 	GroupIDs []string
 
 	// AttachKnown records that we got a straight answer about the shared VM;
 	// false means we could not ask, which is not the same as "no board".
-	AttachKnown   bool
-	BoardAttached bool
-	// BoardID identifies the board to `orb usb attach`.
-	BoardID string
-	// BoardVidPID is the ID we actually matched, not the one we assumed.
-	BoardVidPID string
+	AttachKnown    bool
+	DeviceAttached bool
+	// DeviceID identifies the board to `orb usb attach`.
+	DeviceID string
+	// DeviceVidPID is the ID we actually matched, not the one we assumed.
+	DeviceVidPID string
 
-	// IDs is what we searched for, so a warning can say so.
-	IDs []USBID
+	// Profile is the hardware we searched for, so a warning can name it.
+	Profile DeviceProfile
 }
 
-func (u USBDevices) BoardFound() bool { return u.BoardNode != "" }
+// IDs is what we searched for.
+func (u USBDevices) IDs() []USBID { return u.Profile.IDs }
 
-// BoardDetached is the shared-VM counterpart of a missing board: the Mac has
+// Label names the hardware in prose.
+func (u USBDevices) Label() string {
+	if u.Profile.Label == "" {
+		return FPGAProfile.Label
+	}
+	return u.Profile.Label
+}
+
+func (u USBDevices) DeviceFound() bool { return u.DeviceNode != "" }
+
+// DeviceDetached is the shared-VM counterpart of a missing board: the Mac has
 // it, the daemon's VM does not, and one command fixes that.
-func (u USBDevices) BoardDetached() bool {
-	return u.Mode == USBSharedVM && u.AttachKnown && !u.BoardAttached
+func (u USBDevices) DeviceDetached() bool {
+	return u.Mode == USBSharedVM && u.AttachKnown && !u.DeviceAttached
 }
 
 // Enumerable reports whether a host scan describes the container's devices.
 // It does not on a shared-VM daemon, so a quiet scan is not "no board".
 func (u USBDevices) Enumerable() bool { return u.Mode == USBHostDevices }
 
-// BoardRootOnly means the udev rule is missing.
-func (u USBDevices) BoardRootOnly() bool { return u.BoardFound() && u.BoardGID == 0 }
+// DeviceRootOnly means the udev rule is missing.
+func (u USBDevices) DeviceRootOnly() bool { return u.DeviceFound() && u.DeviceGID == 0 }
 
 func ContainerHasUSBPassthrough(binds []string) bool {
 	for _, bind := range binds {
@@ -194,14 +271,17 @@ func ContainerHasUSBPassthrough(binds []string) bool {
 }
 
 // Detect resolves how this daemon reaches USB, then probes accordingly.
-func Detect(id DaemonIdentity, ids []USBID) USBDevices {
-	return DetectUSB(daemonUSBMode(id, runtime.GOOS == "linux"), id, ids)
+func Detect(id DaemonIdentity, p DeviceProfile) USBDevices {
+	return DetectUSB(daemonUSBMode(id, runtime.GOOS == "linux"), id, p)
 }
 
 // DetectUSB reports what the daemon can hand a container.
-func DetectUSB(mode DaemonUSBMode, id DaemonIdentity, ids []USBID) USBDevices {
-	ids = usbIDsOrDefault(ids)
-	u := USBDevices{Mode: mode, Identity: id, Supported: mode != USBUnavailable, IDs: ids}
+func DetectUSB(mode DaemonUSBMode, id DaemonIdentity, p DeviceProfile) USBDevices {
+	if len(p.IDs) == 0 {
+		p = FPGAProfile
+	}
+	ids := p.IDs
+	u := USBDevices{Mode: mode, Identity: id, Supported: mode != USBUnavailable, Profile: p}
 	switch mode {
 	case USBHostDevices:
 		scanHostUSB(&u)
@@ -209,7 +289,7 @@ func DetectUSB(mode DaemonUSBMode, id DaemonIdentity, ids []USBID) USBDevices {
 		// Cannot stat the VM's bus from here; the daemon resolves the bind.
 		u.BusDir = true
 		u.Serial = orbSerialPorts()
-		u.BoardID, u.BoardVidPID, u.BoardAttached, u.AttachKnown = orbBoard(ids)
+		u.DeviceID, u.DeviceVidPID, u.DeviceAttached, u.AttachKnown = orbDevice(ids)
 
 		// The node is root:root 0660 inside the VM. No udev rule of ours runs
 		// there, and a chown at startup would not survive a replug (the device
@@ -236,13 +316,13 @@ func platformName() string {
 	}
 }
 
-// orbBoard asks OrbStack whether the FPGA is attached to its VM. `orb serial
+// orbDevice asks OrbStack whether the FPGA is attached to its VM. `orb serial
 // list` cannot answer this: the FT2232H's JTAG channel is not a serial port,
 // so macOS creates no cu.usbserial node and the board never appears there.
 //
 // Lines are "ID  VID:PID  NAME  STATE", NAME is multi-word, and STATE is blank
 // when detached, so the last field is the only reliable place to look.
-func orbBoard(ids []USBID) (id, vidPID string, attached, known bool) {
+func orbDevice(ids []USBID) (id, vidPID string, attached, known bool) {
 	orb, err := exec.LookPath("orb")
 	if err != nil {
 		return "", "", false, false

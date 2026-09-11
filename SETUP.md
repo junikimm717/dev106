@@ -211,6 +211,30 @@ too if you still want them. Passthrough itself binds the whole USB bus and
 does not depend on this list; the IDs only decide what dev106 *reports*, so an
 unlisted programmer still works, it just is not mentioned.
 
+#### Hardware that is not an FPGA
+
+The passthrough machinery is device agnostic — it binds the bus, adds the
+cgroup rule, joins the owning group, and maps serial nodes, none of which
+knows what is on the other end. Only the *wording* assumed an FPGA. Set a
+label and dev106 stops talking about bitstreams:
+
+```toml
+usb        = true
+usb_ids    = ["2341:0043"]
+usb_label  = "Arduino"
+```
+
+Setting `usb_label` means the hardware is not an FPGA board, so the
+openFPGALoader-specific advice — its udev rules file, the sample flash
+command — is dropped rather than shown to someone holding an Arduino.
+Overriding `usb_ids` alone keeps the FPGA wording, since the common case
+there is adding a programmer the built-in list misses.
+
+What a new device still needs is its own tooling in the image: flashing AVR
+means `avrdude`, which is a new stage in `docker/Dockerfile` alongside
+`mit_6106`, `mit_6181`, and `mit_6205`. `dev106 config` prints the effective
+label and ID list.
+
 ### Editor tooling
 
 The `nvim_6205` image ships verible, svlangserver, pyright, and ruff, with

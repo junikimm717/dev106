@@ -22,7 +22,7 @@ type DevClient struct {
 	client *dockerClient.Client
 	ctx    context.Context
 
-	usbIDs  []host.USBID
+	profile host.DeviceProfile
 	usbOnce sync.Once
 	usb     host.USBDevices
 }
@@ -43,18 +43,20 @@ func New(ctx context.Context, cfg *config.DevConfig) (*DevClient, error) {
 	// A typo here must not stop a shell opening, so report it and carry on
 	// with whatever parsed.
 	var ids []host.USBID
+	label := ""
 	if cfg != nil {
 		var bad []string
 		ids, bad = host.ParseUSBIDs(cfg.USBIDs)
 		for _, entry := range bad {
 			fmt.Fprintf(os.Stderr, "warning: ignoring malformed usb_ids entry %q; expected \"vid:pid\"\n", entry)
 		}
+		label = cfg.USBLabel
 	}
 
 	return &DevClient{
-		client: client,
-		ctx:    ctx,
-		usbIDs: ids,
+		client:  client,
+		ctx:     ctx,
+		profile: host.Profile(label, ids),
 	}, nil
 }
 
@@ -81,7 +83,7 @@ func (d *DevClient) daemonIdentity() host.DaemonIdentity {
 func (d *DevClient) USB() host.USBDevices {
 	d.usbOnce.Do(func() {
 		id := d.daemonIdentity()
-		d.usb = host.Detect(id, d.usbIDs)
+		d.usb = host.Detect(id, d.profile)
 	})
 	return d.usb
 }

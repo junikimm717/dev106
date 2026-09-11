@@ -27,13 +27,13 @@ func TestApplyUSB(t *testing.T) {
 	t.Run("full passthrough", func(t *testing.T) {
 		hc := &container.HostConfig{Binds: []string{"/repo:/workspace:rw"}}
 		applyUSB(hc, host.USBDevices{
-			Mode:      host.USBHostDevices,
-			Supported: true,
-			BusDir:    true,
-			BoardNode: "/dev/bus/usb/001/007",
-			BoardGID:  46,
-			Serial:    []string{"/dev/ttyUSB0", "/dev/ttyUSB1"},
-			GroupIDs:  []string{"20", "46"},
+			Mode:       host.USBHostDevices,
+			Supported:  true,
+			BusDir:     true,
+			DeviceNode: "/dev/bus/usb/001/007",
+			DeviceGID:  46,
+			Serial:     []string{"/dev/ttyUSB0", "/dev/ttyUSB1"},
+			GroupIDs:   []string{"20", "46"},
 		})
 
 		if !containsString(hc.Binds, "/dev/bus/usb:/dev/bus/usb") {
@@ -72,7 +72,7 @@ func containsString(haystack []string, needle string) bool {
 // point of trusting the VM rather than scanning for a board.
 func TestApplyUSBSharedVM(t *testing.T) {
 	hc := &container.HostConfig{}
-	applyUSB(hc, host.Detect(host.DaemonIdentity{OperatingSystem: "OrbStack"}, nil))
+	applyUSB(hc, host.Detect(host.DaemonIdentity{OperatingSystem: "OrbStack"}, host.FPGAProfile))
 
 	if !containsString(hc.Binds, "/dev/bus/usb:/dev/bus/usb") {
 		t.Fatalf("shared VM should still get the bus bind: %v", hc.Binds)
