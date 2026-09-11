@@ -14,9 +14,8 @@ import (
 	"github.com/opencontainers/image-spec/specs-go/v1"
 )
 
-// RepoConfigName is a per-repository override that layers on top of the
-// global config, so a 6.205 checkout can differ from the 6.181 default
-// without either one being edited.
+// RepoConfigName layers over the global config, so a 6.205 checkout can
+// differ from the 6.181 default without either being edited.
 const RepoConfigName = ".dev106.toml"
 
 type DevConfig struct {
@@ -26,7 +25,7 @@ type DevConfig struct {
 	LabBC      bool   `toml:"labbc"`
 	USB        bool   `toml:"usb"`
 
-	// Where the values came from, for `dev106 config` and error messages.
+	// Where the values came from, for `dev106 config`.
 	GlobalPath string `toml:"-"`
 	RepoPath   string `toml:"-"`
 }
@@ -69,7 +68,8 @@ follow_host = %t
 labbc = %t
 
 # Pass the FPGA board through to the container for flashing and UART.
-# 6.205 only, and only works on a Linux host (including WSL2).
+# 6.205 only. Works on Linux, WSL2, and OrbStack; Docker Desktop for Mac
+# has no direct USB passthrough.
 usb = %t
 
 # Taking more than one class? Drop a %s at the root of a repo to
@@ -99,10 +99,8 @@ func (c *DevConfig) linuxPlatform() v1.Platform {
 	}
 }
 
-// LoadConfig reads the global config, then layers the repo's RepoConfigName
-// over it when root names a repository that has one. A key absent from the
-// repo file keeps its global value, so an override only has to name what
-// actually differs. Pass "" for root to skip the overlay.
+// LoadConfig reads the global config, then layers RepoConfigName over it. A
+// key absent from the repo file keeps its global value. Pass "" to skip.
 func LoadConfig(root string) (*DevConfig, error) {
 	path, err := configPath()
 	if err != nil {

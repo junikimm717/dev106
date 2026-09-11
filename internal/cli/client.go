@@ -7,8 +7,11 @@ import (
 	"os"
 	"os/signal"
 	"os/user"
+	"runtime"
 	"strings"
+	"sync"
 	"syscall"
+	"time"
 
 	"github.com/containerd/errdefs"
 	"github.com/junikimm717/dev106/internal/shared"
@@ -21,6 +24,9 @@ import (
 type DevClient struct {
 	client *dockerClient.Client
 	ctx    context.Context
+
+	usbOnce sync.Once
+	usb     USBDevices
 }
 
 func NewClient(ctx context.Context) (*DevClient, error) {
@@ -48,6 +54,34 @@ func NewClient(ctx context.Context) (*DevClient, error) {
 	}, nil
 }
 
+// daemonIdentity treats a daemon that will not answer as unknown rather than
+// as an error; USB must never be why a shell fails to open.
+func (d *DevClient) daemonIdentity() DaemonIdentity {
+	id := DaemonIdentity{}
+	if host := os.Getenv("DOCKER_HOST"); strings.HasPrefix(host, "tcp://") || strings.HasPrefix(host, "ssh://") {
+		id.Remote = true
+	}
+
+	ctx, cancel := context.WithTimeout(d.ctx, 3*time.Second)
+	defer cancel()
+	result, err := d.client.Info(ctx, dockerClient.InfoOptions{})
+	if err != nil {
+		return id
+	}
+	id.OperatingSystem = result.Info.OperatingSystem
+	id.KernelVersion = result.Info.KernelVersion
+	return id
+}
+
+// USB reports what the daemon can hand a container.
+func (d *DevClient) USB() USBDevices {
+	d.usbOnce.Do(func() {
+		id := d.daemonIdentity()
+		d.usb = DetectUSB(daemonUSBMode(id, runtime.GOOS == "linux"), id)
+	})
+	return d.usb
+}
+
 func (d *DevClient) Run(config *DevConfig, containerName string, binds []string, root string) error {
 	u, err := user.Current()
 	if err != nil {
@@ -58,7 +92,7 @@ func (d *DevClient) Run(config *DevConfig, containerName string, binds []string,
 		Binds: binds,
 	}
 	if config.USB {
-		applyUSB(hostConfig, DetectUSB())
+		applyUSB(hostConfig, d.USB())
 	}
 	resp, err := d.client.ContainerCreate(d.ctx, dockerClient.ContainerCreateOptions{
 		Image: config.Image,
@@ -276,9 +310,9 @@ func (d *DevClient) ContainerExists(containerName string) (bool, error) {
 	return true, nil
 }
 
-// StaleUSBWarning warns when a running container predates the board being
-// plugged in, since its device list was fixed at creation time.
-func (d *DevClient) StaleUSBWarning(containerName string, u USBDevices) string {
+// StaleUSBWarning warns when a running container predates the board.
+func (d *DevClient) StaleUSBWarning(containerName string) string {
+	u := d.USB()
 	result, err := d.client.ContainerInspect(d.ctx, containerName, dockerClient.ContainerInspectOptions{})
 	if err != nil || result.Container.HostConfig == nil {
 		return ""

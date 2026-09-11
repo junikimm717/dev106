@@ -99,8 +99,7 @@ func BindMounts(config *DevConfig, dir string) ([]string, error) {
 		res = append(res, fmt.Sprintf("%s:%s/.telerun:rw", telerun, shared.CONTAINER_HOME))
 	}
 
-	// `lab-bc configure` writes kerberos + MIT ID to its config dir. Keeping
-	// that on the host means logging in once rather than once per container.
+	// Keeping lab-bc's config dir on the host means logging in once.
 	if config.LabBC {
 		labbc := LabBCConfigDir(home)
 		if err := os.MkdirAll(labbc, 0o700); err != nil {
@@ -112,8 +111,7 @@ func BindMounts(config *DevConfig, dir string) ([]string, error) {
 	return res, nil
 }
 
-// LabBCConfigDir is where lab-bc keeps credentials on the host. It follows
-// XDG_CONFIG_HOME so it lands in the same place run_6205.sh mounts from.
+// LabBCConfigDir follows XDG_CONFIG_HOME, matching run_6205.sh.
 func LabBCConfigDir(home string) string {
 	if xdg := os.Getenv("XDG_CONFIG_HOME"); xdg != "" {
 		return filepath.Join(xdg, "lab-bc")

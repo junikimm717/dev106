@@ -148,18 +148,15 @@ func ensureContainer(app *App) error {
 	}
 	if exists {
 		if app.Config.USB {
-			if warning := app.Client.StaleUSBWarning(app.ContainerName, cli.DetectUSB()); warning != "" {
+			if warning := app.Client.StaleUSBWarning(app.ContainerName); warning != "" {
 				fmt.Fprint(os.Stderr, warning)
 			}
 		}
 		return nil
 	}
-	// The device list is frozen here, so this is where a host that can never
-	// pass USB through gets said out loud. The actionable cases already
-	// printed in newApp, hence the Supported check rather than an
-	// unconditional warning.
+	// Actionable cases already printed in newApp; this is the once-only one.
 	if app.Config.USB {
-		if devices := cli.DetectUSB(); !devices.Supported {
+		if devices := app.Client.USB(); !devices.Supported {
 			fmt.Fprint(os.Stderr, cli.USBWarning(devices))
 		}
 	}

@@ -11,8 +11,7 @@ import (
 	"testing"
 )
 
-// fakeHost builds a sysfs/dev tree that DetectUSB can walk, so the parsing of
-// bus/device numbers into a /dev node is covered without a real board.
+// fakeHost is a sysfs/dev tree DetectUSB can walk without real hardware.
 type fakeHost struct {
 	sysfs string
 	dev   string
@@ -32,7 +31,7 @@ func newFakeHost(t *testing.T) *fakeHost {
 		t.Fatal(err)
 	}
 
-	t.Setenv("HOME", base) // keep anything home-relative inside the sandbox
+	t.Setenv("HOME", base)
 
 	oldSysfs, oldBus, oldDev, oldGroup := sysfsUSBDir, usbBusDir, devDir, groupFile
 	sysfsUSBDir = h.sysfs
@@ -48,8 +47,7 @@ func newFakeHost(t *testing.T) *fakeHost {
 	return h
 }
 
-// addUSBDevice writes the sysfs attributes for one device and, when the
-// vendor/product match the board, the /dev node it resolves to.
+// addUSBDevice writes one device's sysfs attributes and its /dev node.
 func (h *fakeHost) addUSBDevice(t *testing.T, name, vendor, product string, bus, dev int) string {
 	t.Helper()
 	dir := filepath.Join(h.sysfs, name)
@@ -93,14 +91,14 @@ func currentGID(t *testing.T) int {
 
 func TestDetectUSBFindsBoard(t *testing.T) {
 	h := newFakeHost(t)
-	// A hub and a mouse share the tree; only the FT2232H should match.
+	// Only the FT2232H should match.
 	h.addUSBDevice(t, "usb1", "1d6b", "0002", 1, 1)
 	h.addUSBDevice(t, "1-2", "046d", "c52b", 1, 4)
 	want := h.addUSBDevice(t, "1-3", fpgaVendorID, fpgaProductID, 1, 7)
 
-	got := DetectUSB()
+	got := DetectUSB(USBHostDevices, DaemonIdentity{OperatingSystem: "Ubuntu 24.04.1 LTS"})
 
-	if !got.Supported || !got.BusDir {
+	if !got.Supported || !got.BusDir || !got.Enumerable() {
 		t.Fatalf("linux host should support passthrough: %+v", got)
 	}
 	if got.BoardNode != want {
@@ -114,13 +112,12 @@ func TestDetectUSBFindsBoard(t *testing.T) {
 	}
 }
 
-// The device number is zero padded in /dev but not in sysfs, and a bus number
-// can carry a leading zero. Concatenating the strings would miss the node.
+// Zero padded in /dev but not in sysfs, so string concat would miss the node.
 func TestDetectUSBPadsBusAndDeviceNumbers(t *testing.T) {
 	h := newFakeHost(t)
 	want := h.addUSBDevice(t, "3-1", fpgaVendorID, fpgaProductID, 3, 12)
 
-	got := DetectUSB()
+	got := DetectUSB(USBHostDevices, DaemonIdentity{OperatingSystem: "Ubuntu 24.04.1 LTS"})
 	if got.BoardNode != want {
 		t.Fatalf("BoardNode = %q, want %q", got.BoardNode, want)
 	}
@@ -133,7 +130,7 @@ func TestDetectUSBNoBoardFallsBackToPlugdev(t *testing.T) {
 	h := newFakeHost(t)
 	h.addUSBDevice(t, "1-2", "046d", "c52b", 1, 4)
 
-	got := DetectUSB()
+	got := DetectUSB(USBHostDevices, DaemonIdentity{OperatingSystem: "Ubuntu 24.04.1 LTS"})
 
 	if got.BoardFound() {
 		t.Fatalf("no board should have matched: %+v", got)
@@ -153,7 +150,7 @@ func TestDetectUSBCollectsSerialNodes(t *testing.T) {
 	acm0 := h.addSerial(t, "ttyACM0")
 	h.addSerial(t, "ttyS0") // a plain UART, not ours
 
-	got := DetectUSB()
+	got := DetectUSB(USBHostDevices, DaemonIdentity{OperatingSystem: "Ubuntu 24.04.1 LTS"})
 
 	if len(got.Serial) != 2 {
 		t.Fatalf("Serial = %v, want ttyUSB0 and ttyACM0", got.Serial)
@@ -168,13 +165,12 @@ func TestDetectUSBCollectsSerialNodes(t *testing.T) {
 	}
 }
 
-// Root is already implied inside the container, so adding gid 0 would be a
-// privilege grant rather than a convenience.
+// Adding gid 0 would be a privilege grant, not a convenience.
 func TestDetectUSBNeverAddsRootGroup(t *testing.T) {
 	h := newFakeHost(t)
 	h.addUSBDevice(t, "1-3", fpgaVendorID, fpgaProductID, 1, 7)
 
-	for _, gid := range DetectUSB().GroupIDs {
+	for _, gid := range DetectUSB(USBHostDevices, DaemonIdentity{OperatingSystem: "Ubuntu 24.04.1 LTS"}).GroupIDs {
 		if gid == "0" {
 			t.Fatal("gid 0 must never be added")
 		}
@@ -187,7 +183,7 @@ func TestDetectUSBMissingSysfsIsHarmless(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	got := DetectUSB()
+	got := DetectUSB(USBHostDevices, DaemonIdentity{OperatingSystem: "Ubuntu 24.04.1 LTS"})
 	if got.BoardFound() {
 		t.Fatal("no sysfs means no board")
 	}

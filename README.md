@@ -138,20 +138,27 @@ USB devices is added so replugging keeps working, any `/dev/ttyUSB*` and
 `/dev/ttyACM*` are mapped in, and the host groups owning those nodes are added
 to your container user.
 
-**This only works on a Linux host, including WSL2.** Docker Desktop on macOS
-and Windows runs the daemon in a VM with no access to your USB bus; there is no
-setting that changes it. Simulation and `lab-bc build` are unaffected — build
-the bitstream in the container and flash from a Linux host or VM.
+Whether this works depends on your **Docker daemon**, not your OS — the
+devices a container sees are the daemon's. dev106 asks the daemon which it is
+and adapts:
 
-dev106 tells you when flashing will not work rather than letting openFPGALoader
-fail later:
+| daemon | flashing | notes |
+|---|---|---|
+| Docker Engine on Linux | yes | the board is scanned and passed straight through |
+| Docker Desktop under WSL2 | yes | `usbipd attach --wsl` first; WSL2 distros share one kernel |
+| OrbStack (macOS) | yes | `orb usb attach` first; serial adapters forward automatically |
+| Docker Desktop (macOS/Windows) | no | reaches USB only over USB/IP, which needs a privileged helper container and does not present `/dev/bus/usb` |
+| remote `DOCKER_HOST` | no | the board would have to be plugged into the daemon's machine |
 
-- no board plugged in → how to attach it (`usbipd attach` under WSL2)
-- board present but owned by root → install the openFPGALoader udev rule
-- board plugged in after the container was created → `dev106 restart`, since a
-  container's devices are fixed when it is created
+So on a Mac, **OrbStack can flash and Docker Desktop cannot**. If you're on
+Docker Desktop for Mac, either switch to OrbStack or build the bitstream here
+and flash from a Linux host.
 
-None of these block you; simulation needs no board.
+dev106 says which of these you're in rather than letting openFPGALoader fail
+later — no board plugged in, a board owned by root (missing udev rule), or a
+board plugged in after the container was created (`dev106 restart`, since a
+container's devices are fixed at creation). None of it blocks you; simulation
+and `lab-bc build` need no board at all.
 
 ## Container Bootstrapper
 

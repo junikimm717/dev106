@@ -26,9 +26,8 @@ func newApp(allowNoRoot bool) (*App, error) {
 		return nil, err
 	}
 
-	// The repo root is resolved before the config so that a .dev106.toml at
-	// the root can override the global one. rootErr is deferred rather than
-	// returned so commands that tolerate no repo still get a config.
+	// Root first, so a .dev106.toml there can override the global config.
+	// rootErr is deferred so commands tolerating no repo still get a config.
 	root, rootErr := cli.FindRoot(wd)
 	if rootErr != nil {
 		root = ""
@@ -59,12 +58,10 @@ func newApp(allowNoRoot bool) (*App, error) {
 		fmt.Fprint(os.Stderr, warning)
 	}
 
-	// Only the warnings the user can act on repeat on every command. A host
-	// that cannot pass USB through at all is a fact of the platform, not a
-	// mistake, so it is said once at container creation instead of nagging
-	// every time someone runs a simulation.
+	// Only actionable warnings repeat; an unusable daemon is said once, at
+	// container creation.
 	if config.USB {
-		if devices := cli.DetectUSB(); devices.Supported {
+		if devices := client.USB(); devices.Supported {
 			if warning := cli.USBWarning(devices); warning != "" {
 				fmt.Fprint(os.Stderr, warning)
 			}

@@ -39,9 +39,7 @@ func sysfsField(dir, name string) string {
 	return strings.TrimSpace(string(b))
 }
 
-// findBoard walks sysfs for the FT2232H and turns its bus/device numbers into
-// the /dev/bus/usb node. Reading sysfs rather than shelling out to lsusb keeps
-// this working in a stripped-down host.
+// findBoard walks sysfs for the FT2232H and resolves its /dev/bus/usb node.
 func findBoard() string {
 	entries, err := os.ReadDir(sysfsUSBDir)
 	if err != nil {
@@ -52,8 +50,7 @@ func findBoard() string {
 		if sysfsField(dir, "idVendor") != fpgaVendorID || sysfsField(dir, "idProduct") != fpgaProductID {
 			continue
 		}
-		// These are decimal in sysfs but zero padded in /dev, and busnum can
-		// carry a leading zero, so parse rather than concatenate.
+		// Decimal in sysfs, zero padded in /dev, so parse rather than concat.
 		bus, err := strconv.Atoi(sysfsField(dir, "busnum"))
 		if err != nil {
 			continue
@@ -83,10 +80,8 @@ func serialNodes() []string {
 	return out
 }
 
-// DetectUSB inspects the host for the FPGA board and any serial adapters.
-func DetectUSB() USBDevices {
-	u := USBDevices{Supported: true}
-
+// scanHostUSB is only meaningful when the daemon shares our /dev.
+func scanHostUSB(u *USBDevices) {
 	if info, err := os.Stat(usbBusDir); err == nil && info.IsDir() {
 		u.BusDir = true
 	}
@@ -108,23 +103,19 @@ func DetectUSB() USBDevices {
 		}
 	}
 
-	// Without a board we still join plugdev, so a board plugged in later is
-	// readable through the bind mounted bus without recreating the container.
+	// Join plugdev anyway, so a board plugged in later is readable.
 	if !u.BoardFound() {
 		if gid, ok := plugdevGID(); ok {
 			gids[gid] = true
 		}
 	}
 
-	// Root is already implied and adding it would be a privilege grant, not a
-	// convenience.
+	// Adding root would be a privilege grant, not a convenience.
 	delete(gids, 0)
 	for gid := range gids {
 		u.GroupIDs = append(u.GroupIDs, strconv.Itoa(gid))
 	}
 	sort.Strings(u.GroupIDs)
-
-	return u
 }
 
 func plugdevGID() (int, bool) {
@@ -144,9 +135,4 @@ func plugdevGID() (int, bool) {
 		return gid, true
 	}
 	return 0, false
-}
-
-// USBWarning returns the advice to print for the current host, or "".
-func USBWarning(u USBDevices) string {
-	return usbAdvice(u, IsWSL(), "this host")
 }
