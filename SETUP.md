@@ -269,6 +269,10 @@ can flash and it still fails:
 
 - The board must be attached before the container is created. Plug it in, then
   `dev106 restart` — a container's device list is fixed at creation.
+- On OrbStack this does not apply: the whole `/dev/bus/usb` is bound in, so
+  `orb usb attach` and a replug both take effect in a running container. The
+  container user joins the root group there, because the node OrbStack creates
+  inside its VM is `root:root` and no udev rule of ours runs in that VM.
 - On Linux, a board owned by root means the udev rule is missing:
   ```bash
   sudo curl -fsSL -o /etc/udev/rules.d/99-openfpgaloader.rules \

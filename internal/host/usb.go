@@ -86,9 +86,22 @@ type USBDevices struct {
 	Serial   []string
 	// GroupIDs own the nodes above, minus root.
 	GroupIDs []string
+
+	// AttachKnown records that we got a straight answer about the shared VM;
+	// false means we could not ask, which is not the same as "no board".
+	AttachKnown   bool
+	BoardAttached bool
+	// BoardID identifies the board to `orb usb attach`.
+	BoardID string
 }
 
 func (u USBDevices) BoardFound() bool { return u.BoardNode != "" }
+
+// BoardDetached is the shared-VM counterpart of a missing board: the Mac has
+// it, the daemon's VM does not, and one command fixes that.
+func (u USBDevices) BoardDetached() bool {
+	return u.Mode == USBSharedVM && u.AttachKnown && !u.BoardAttached
+}
 
 // Enumerable reports whether a host scan describes the container's devices.
 // It does not on a shared-VM daemon, so a quiet scan is not "no board".
@@ -121,6 +134,14 @@ func DetectUSB(mode DaemonUSBMode, id DaemonIdentity) USBDevices {
 		// Cannot stat the VM's bus from here; the daemon resolves the bind.
 		u.BusDir = true
 		u.Serial = orbSerialPorts()
+		u.BoardID, u.BoardAttached, u.AttachKnown = orbBoard()
+
+		// The node is root:root 0660 inside the VM. No udev rule of ours runs
+		// there, and a chown at startup would not survive a replug (the device
+		// number changes), so the root group is the only durable way for the
+		// container user to open it. scanHostUSB drops gid 0 on purpose; there
+		// a udev rule is the right answer and this would be a needless grant.
+		u.GroupIDs = append(u.GroupIDs, "0")
 	}
 	return u
 }
@@ -138,6 +159,33 @@ func platformName() string {
 	default:
 		return "this host"
 	}
+}
+
+// orbBoard asks OrbStack whether the FPGA is attached to its VM. `orb serial
+// list` cannot answer this: the FT2232H's JTAG channel is not a serial port,
+// so macOS creates no cu.usbserial node and the board never appears there.
+//
+// Lines are "ID  VID:PID  NAME  STATE", NAME is multi-word, and STATE is blank
+// when detached, so the last field is the only reliable place to look.
+func orbBoard() (id string, attached, known bool) {
+	orb, err := exec.LookPath("orb")
+	if err != nil {
+		return "", false, false
+	}
+	out, err := exec.Command(orb, "usb", "list").Output()
+	if err != nil {
+		return "", false, false
+	}
+
+	for _, line := range strings.Split(string(out), "\n") {
+		fields := strings.Fields(line)
+		if len(fields) < 3 || !strings.EqualFold(fields[1], fpgaVendorID+":"+fpgaProductID) {
+			continue
+		}
+		return fields[0], fields[len(fields)-1] == "attached", true
+	}
+	// orb answered and the board was not in it, so it is genuinely unplugged.
+	return "", false, true
 }
 
 // orbSerialPorts lists the macOS serial ports OrbStack forwards into the VM.

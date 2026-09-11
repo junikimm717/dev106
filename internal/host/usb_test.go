@@ -60,6 +60,35 @@ func TestUSBAdvice(t *testing.T) {
 			want:     []string{"orb usb attach", "orb usb list"},
 		},
 		{
+			// The board is there and usable, so nagging about attaching it
+			// was the bug: the note fired on every single start.
+			name: "orbstack with the board attached is silent",
+			devices: USBDevices{
+				Mode:          USBSharedVM,
+				Supported:     true,
+				BusDir:        true,
+				AttachKnown:   true,
+				BoardAttached: true,
+				BoardID:       "00100000",
+				Identity:      DaemonIdentity{OperatingSystem: "OrbStack"},
+			},
+			platform: "Docker on macOS",
+			quiet:    true,
+		},
+		{
+			name: "orbstack with a detached board names the exact command",
+			devices: USBDevices{
+				Mode:        USBSharedVM,
+				Supported:   true,
+				BusDir:      true,
+				AttachKnown: true,
+				BoardID:     "00100000",
+				Identity:    DaemonIdentity{OperatingSystem: "OrbStack"},
+			},
+			platform: "Docker on macOS",
+			want:     []string{"orb usb attach 00100000", "0403:6010", "lab-bc"},
+		},
+		{
 			name:     "root owned node points at the udev rule",
 			devices:  USBDevices{Mode: USBHostDevices, Supported: true, BusDir: true, BoardNode: "/dev/bus/usb/001/007", BoardGID: 0},
 			platform: "this host",
@@ -194,6 +223,10 @@ func TestDaemonUSBMode(t *testing.T) {
 // A quiet scan on a daemon we cannot enumerate must never be reported as
 // "no board" -- that was the bug this whole mode split exists to prevent.
 func TestSharedVMNeverReportsMissingBoard(t *testing.T) {
+	// No orb on PATH, so this is the "cannot ask" case rather than whatever
+	// the developer happens to have plugged in.
+	t.Setenv("PATH", t.TempDir())
+
 	u := DetectUSB(USBSharedVM, DaemonIdentity{OperatingSystem: "OrbStack"})
 
 	if u.Enumerable() {
@@ -290,6 +323,96 @@ OUT
 		if strings.Contains(g, "/dev/cu.") || strings.Contains(g, "Bluetooth") {
 			t.Fatalf("should have been filtered out: %s", g)
 		}
+	}
+}
+
+// fakeOrb puts a stub `orb` on PATH that prints body for any subcommand.
+func fakeOrb(t *testing.T, body string) {
+	t.Helper()
+	dir := t.TempDir()
+	script := "#!/bin/sh\ncat <<'OUT'\n" + body + "\nOUT\n"
+	if err := os.WriteFile(filepath.Join(dir, "orb"), []byte(script), 0755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", dir+":/bin:/usr/bin")
+}
+
+func TestOrbBoard(t *testing.T) {
+	// Real `orb usb list` output. Detached leaves the state column blank, and
+	// the board name is two words, so neither field count nor position alone
+	// identifies the state.
+	cases := []struct {
+		name         string
+		out          string
+		wantID       string
+		wantAttached bool
+		wantKnown    bool
+	}{
+		{
+			name:         "attached board",
+			out:          "00100000  0403:6010  Xilinx JTAG+Serial  attached",
+			wantID:       "00100000",
+			wantAttached: true,
+			wantKnown:    true,
+		},
+		{
+			name:      "detached board has a blank state column",
+			out:       "00100000  0403:6010  Xilinx JTAG+Serial  ",
+			wantID:    "00100000",
+			wantKnown: true,
+		},
+		{
+			// orb answered, so "not listed" really does mean unplugged.
+			name:      "board absent but other devices present",
+			out:       "00200000  05ac:8103  Apple Keyboard  attached",
+			wantKnown: true,
+		},
+		{
+			name:      "empty list is still an answer",
+			out:       "",
+			wantKnown: true,
+		},
+		{
+			name:         "board among others",
+			out:          "00200000  05ac:8103  Apple Keyboard  attached\n00100000  0403:6010  Xilinx JTAG+Serial  attached",
+			wantID:       "00100000",
+			wantAttached: true,
+			wantKnown:    true,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			fakeOrb(t, tc.out)
+			id, attached, known := orbBoard()
+			if id != tc.wantID || attached != tc.wantAttached || known != tc.wantKnown {
+				t.Fatalf("orbBoard() = (%q, %v, %v), want (%q, %v, %v)",
+					id, attached, known, tc.wantID, tc.wantAttached, tc.wantKnown)
+			}
+		})
+	}
+}
+
+// Without orb we know nothing, which must not be mistaken for "detached".
+func TestOrbBoardWithoutOrb(t *testing.T) {
+	t.Setenv("PATH", t.TempDir())
+	if id, attached, known := orbBoard(); id != "" || attached || known {
+		t.Fatalf("orbBoard() = (%q, %v, %v), want empty and unknown", id, attached, known)
+	}
+	u := DetectUSB(USBSharedVM, DaemonIdentity{OperatingSystem: "OrbStack"})
+	if u.BoardDetached() {
+		t.Fatal("not being able to ask is not the same as detached")
+	}
+}
+
+// The VM's node is root:root 0660, so without the root group the container
+// user cannot open the board at all -- passthrough was wired up and then
+// silently blocked on permissions.
+func TestSharedVMJoinsRootGroup(t *testing.T) {
+	t.Setenv("PATH", t.TempDir())
+	u := DetectUSB(USBSharedVM, DaemonIdentity{OperatingSystem: "OrbStack"})
+	if !containsString(u.GroupIDs, "0") {
+		t.Fatalf("shared VM should join the root group, got %v", u.GroupIDs)
 	}
 }
 
