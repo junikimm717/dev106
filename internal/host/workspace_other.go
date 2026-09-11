@@ -1,6 +1,6 @@
 //go:build !linux
 
-package cli
+package host
 
 // The 9p/virtiofs Windows-drive problem is specific to WSL.
 

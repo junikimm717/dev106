@@ -6,13 +6,16 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/junikimm717/dev106/internal/cli"
+	"github.com/junikimm717/dev106/internal/config"
+	"github.com/junikimm717/dev106/internal/docker"
+	"github.com/junikimm717/dev106/internal/host"
+	"github.com/junikimm717/dev106/internal/repo"
 	"github.com/spf13/cobra"
 )
 
 type App struct {
-	Config        *cli.DevConfig
-	Client        *cli.DevClient
+	Config        *config.DevConfig
+	Client        *docker.DevClient
 	ContainerName string
 	Root          string
 	Binds         []string
@@ -28,17 +31,17 @@ func newApp(allowNoRoot bool) (*App, error) {
 
 	// Root first, so a .dev106.toml there can override the global config.
 	// rootErr is deferred so commands tolerating no repo still get a config.
-	root, rootErr := cli.FindRoot(wd)
+	root, rootErr := repo.FindRoot(wd)
 	if rootErr != nil {
 		root = ""
 	}
 
-	config, err := cli.LoadConfig(root)
+	config, err := config.Load(root)
 	if err != nil {
 		return nil, err
 	}
 	ctx := context.Background()
-	client, err := cli.NewClient(ctx)
+	client, err := docker.New(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -54,7 +57,7 @@ func newApp(allowNoRoot bool) (*App, error) {
 		}
 	}
 
-	if warning := cli.WorkspaceWarning(root); warning != "" {
+	if warning := host.WorkspaceWarning(root); warning != "" {
 		fmt.Fprint(os.Stderr, warning)
 	}
 
@@ -62,13 +65,13 @@ func newApp(allowNoRoot bool) (*App, error) {
 	// container creation.
 	if config.USB {
 		if devices := client.USB(); devices.Supported {
-			if warning := cli.USBWarning(devices); warning != "" {
+			if warning := host.USBWarning(devices); warning != "" {
 				fmt.Fprint(os.Stderr, warning)
 			}
 		}
 	}
 
-	binds, err := cli.BindMounts(config, root)
+	binds, err := repo.BindMounts(config, root)
 	if err != nil {
 		if allowNoRoot {
 			fmt.Fprintf(os.Stderr, "warning: not using bind mounts: %v\n", err)
@@ -81,7 +84,7 @@ func newApp(allowNoRoot bool) (*App, error) {
 		}
 	}
 
-	name, err := cli.ContainerName(root)
+	name, err := repo.ContainerName(root)
 	if err != nil {
 		return nil, err
 	}
@@ -122,7 +125,7 @@ func main() {
 	rootCmd.AddCommand(configCmd())
 
 	if err := rootCmd.Execute(); err != nil {
-		var exitErr *cli.ExitError
+		var exitErr *docker.ExitError
 		if errors.As(err, &exitErr) {
 			if msg := exitErr.Error(); msg != "" {
 				fmt.Fprintln(os.Stderr, msg)

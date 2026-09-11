@@ -4,7 +4,8 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/junikimm717/dev106/internal/cli"
+	"github.com/junikimm717/dev106/internal/config"
+	"github.com/junikimm717/dev106/internal/host"
 	"github.com/spf13/cobra"
 )
 
@@ -157,7 +158,7 @@ func ensureContainer(app *App) error {
 	// Actionable cases already printed in newApp; this is the once-only one.
 	if app.Config.USB {
 		if devices := app.Client.USB(); !devices.Supported {
-			fmt.Fprint(os.Stderr, cli.USBWarning(devices))
+			fmt.Fprint(os.Stderr, host.USBWarning(devices))
 		}
 	}
 	fmt.Printf("Starting new container %s\n", app.ContainerName)
@@ -178,7 +179,7 @@ func configCmd() *cobra.Command {
 			if c.RepoPath != "" {
 				fmt.Printf("repo:    %s  (overrides the global config)\n", c.RepoPath)
 			} else {
-				fmt.Printf("repo:    none (drop a %s at a repo root to override)\n", cli.RepoConfigName)
+				fmt.Printf("repo:    none (drop a %s at a repo root to override)\n", config.RepoConfigName)
 			}
 			fmt.Println()
 			fmt.Printf("image        = %q\n", c.Image)

@@ -1,6 +1,6 @@
 //go:build linux
 
-package cli
+package host
 
 import (
 	"fmt"
@@ -33,16 +33,16 @@ func newFakeHost(t *testing.T) *fakeHost {
 
 	t.Setenv("HOME", base)
 
-	oldSysfs, oldBus, oldDev, oldGroup := sysfsUSBDir, usbBusDir, devDir, groupFile
+	oldSysfs, oldBus, oldDev, oldGroup := sysfsUSBDir, USBBusDir, devDir, groupFile
 	sysfsUSBDir = h.sysfs
-	usbBusDir = filepath.Join(h.dev, "bus", "usb")
+	USBBusDir = filepath.Join(h.dev, "bus", "usb")
 	devDir = h.dev
 	groupFile = filepath.Join(base, "group")
 	if err := os.WriteFile(groupFile, []byte("root:x:0:\nplugdev:x:46:\n"), 0644); err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() {
-		sysfsUSBDir, usbBusDir, devDir, groupFile = oldSysfs, oldBus, oldDev, oldGroup
+		sysfsUSBDir, USBBusDir, devDir, groupFile = oldSysfs, oldBus, oldDev, oldGroup
 	})
 	return h
 }

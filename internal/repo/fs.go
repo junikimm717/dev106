@@ -1,4 +1,4 @@
-package cli
+package repo
 
 import (
 	"crypto/sha256"
@@ -10,6 +10,7 @@ import (
 	"os/user"
 	"path/filepath"
 
+	"github.com/junikimm717/dev106/internal/config"
 	"github.com/junikimm717/dev106/internal/shared"
 )
 
@@ -60,7 +61,7 @@ func ContainerLabels(root string) map[string]string {
 }
 
 // compute the bind mounts that we'll need for a container.
-func BindMounts(config *DevConfig, dir string) ([]string, error) {
+func BindMounts(cfg *config.DevConfig, dir string) ([]string, error) {
 	res := make([]string, 0, 2)
 	// bruh so the home directory should not be something skibidi.
 	home, err := os.UserHomeDir()
@@ -91,7 +92,7 @@ func BindMounts(config *DevConfig, dir string) ([]string, error) {
 
 	// telerun credentials should be synced.
 	telerun := filepath.Join(home, ".telerun")
-	if config.Telerun {
+	if cfg.Telerun {
 		err := os.MkdirAll(telerun, 0o755)
 		if err != nil {
 			return res, err
@@ -100,7 +101,7 @@ func BindMounts(config *DevConfig, dir string) ([]string, error) {
 	}
 
 	// Keeping lab-bc's config dir on the host means logging in once.
-	if config.LabBC {
+	if cfg.LabBC {
 		labbc := LabBCConfigDir(home)
 		if err := os.MkdirAll(labbc, 0o700); err != nil {
 			return res, err
