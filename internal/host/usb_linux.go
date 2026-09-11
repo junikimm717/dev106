@@ -39,9 +39,9 @@ func sysfsField(dir, name string) string {
 	return strings.TrimSpace(string(b))
 }
 
-// findBoard walks sysfs for a known programmer and resolves its /dev/bus/usb
+// findDevice walks sysfs for a known programmer and resolves its /dev/bus/usb
 // node.
-func findBoard(ids []USBID) string {
+func findDevice(ids []USBID) string {
 	entries, err := os.ReadDir(sysfsUSBDir)
 	if err != nil {
 		return ""
@@ -90,10 +90,10 @@ func scanHostUSB(u *USBDevices) {
 
 	gids := map[int]bool{}
 
-	if node := findBoard(u.IDs); node != "" {
-		u.BoardNode = node
+	if node := findDevice(u.Profile.IDs); node != "" {
+		u.DeviceNode = node
 		if gid, ok := nodeGID(node); ok {
-			u.BoardGID = gid
+			u.DeviceGID = gid
 			gids[gid] = true
 		}
 	}
@@ -106,7 +106,7 @@ func scanHostUSB(u *USBDevices) {
 	}
 
 	// Join plugdev anyway, so a board plugged in later is readable.
-	if !u.BoardFound() {
+	if !u.DeviceFound() {
 		if gid, ok := plugdevGID(); ok {
 			gids[gid] = true
 		}

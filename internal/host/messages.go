@@ -2,6 +2,7 @@ package host
 
 import (
 	"fmt"
+	"path"
 	"strings"
 )
 
@@ -11,38 +12,40 @@ import (
 // usbAdvice explains why flashing will not work, or "" when the board is
 // ready. Only flashing is ever blocked, so these stay warnings.
 func usbAdvice(u USBDevices, wsl bool, platform string) string {
+	p := profileOrDefault(u.Profile)
 	if !u.Supported {
-		return unavailableAdvice(u, platform)
+		return unavailableAdvice(u, p, platform)
 	}
 
 	if u.Mode == USBSharedVM {
 		// orb answered: the board is attached and the container can open it.
-		if u.AttachKnown && u.BoardAttached {
+		if u.AttachKnown && u.DeviceAttached {
 			return ""
 		}
 
-		if u.BoardDetached() {
-			target := u.BoardID
+		if u.DeviceDetached() {
+			target := u.DeviceID
 			if target == "" {
 				target = "<id>"
 			}
-			which := u.BoardVidPID
+			which := u.DeviceVidPID
 			if which == "" {
-				which = FormatUSBIDs(usbIDsOrDefault(u.IDs))
+				which = FormatUSBIDs(p.IDs)
 			}
-			return fmt.Sprintf(`warning: the FPGA board (%s) is not attached to OrbStack's VM,
-  so openFPGALoader cannot see it.
+			return fmt.Sprintf(`warning: the %s (%s) is not attached to OrbStack's VM,
+  so the container cannot see it.
 
   Attach it:
       orb usb attach %s
 
-  Simulation and `+"`lab-bc build`"+` work without it.
+  %s
 
-`, which, target)
+`, p.Label, which, target, p.Fallback)
 		}
 
 		// orb did not answer, so this is a pointer, not a diagnosis.
-		return `note: OrbStack passes USB through, but the board has to be attached first.
+		return fmt.Sprintf(`note: OrbStack passes USB through, but your %s has to be
+  attached first.
 
   Check that it is, and attach it if not:
       orb usb list
@@ -51,26 +54,31 @@ func usbAdvice(u USBDevices, wsl bool, platform string) string {
   Attached devices are visible to every container, so this is a one-time
   step per plug-in. Serial adapters are forwarded automatically.
 
+`, p.Label)
+	}
+
+	if u.DeviceRootOnly() {
+		fix := `  Give your user access with a udev rule from the vendor, then replug it.
 `
-	}
-
-	if u.BoardRootOnly() {
-		return fmt.Sprintf(`warning: %s is owned by root, so openFPGALoader cannot open it.
-
-  Install the udev rule on the host and replug the board:
-      sudo curl -fsSL -o /etc/udev/rules.d/99-openfpgaloader.rules \
-        https://raw.githubusercontent.com/trabucayre/openFPGALoader/master/99-openfpgaloader.rules
+		if p.UdevRules != "" {
+			fix = fmt.Sprintf(`  Install the udev rule on the host and replug it:
+      sudo curl -fsSL -o /etc/udev/rules.d/%s \
+        %s
       sudo udevadm control --reload-rules && sudo udevadm trigger
+`, path.Base(p.UdevRules), p.UdevRules)
+		}
+		return fmt.Sprintf(`warning: your %s (%s) is owned by root, so the container
+  cannot open it.
 
-`, u.BoardNode)
+%s
+`, p.Label, u.DeviceNode, fix)
 	}
 
-	if !u.BoardFound() {
+	if !u.DeviceFound() {
 		// usbipd wants one ID, so show the commonest rather than the whole
 		// list; the line below says what else would have counted.
-		ids := usbIDsOrDefault(u.IDs)
-		example := ids[0].String()
-		fix := "  Plug the board in, then run `dev106 restart`.\n"
+		example := p.IDs[0].String()
+		fix := fmt.Sprintf("  Plug the %s in, then run `dev106 restart`.\n", p.Label)
 		if wsl {
 			fix = fmt.Sprintf(`  WSL2 does not see USB devices until you attach them from Windows.
   In an admin PowerShell:
@@ -80,70 +88,75 @@ func usbAdvice(u USBDevices, wsl bool, platform string) string {
   Then run `+"`dev106 restart`"+`.
 `, example, example)
 		}
-		return fmt.Sprintf(`warning: no FPGA board is visible to dev106.
+		return fmt.Sprintf(`warning: no %s is visible to dev106.
 
-  Looked for %s. If your programmer is not one of those, name it in your
+  Looked for %s. If your hardware is not one of those, name it in your
   dev106 config:
-      usb_ids = ["vvvv:pppp"]
+      usb_ids   = ["vvvv:pppp"]
+      usb_label = "what it is"
 
-  Simulation and `+"`lab-bc build`"+` work fine. Flashing will not.
+  %s
 
 %s
-`, FormatUSBIDs(ids), fix)
+`, p.Label, FormatUSBIDs(p.IDs), p.Fallback, fix)
 	}
 
 	return ""
 }
 
-func unavailableAdvice(u USBDevices, platform string) string {
+func unavailableAdvice(u USBDevices, p DeviceProfile, platform string) string {
 	switch {
 	case u.Identity.Remote:
-		return `warning: your Docker daemon is not on this machine, so it cannot see
-  a board plugged in here.
+		return fmt.Sprintf(`warning: your Docker daemon is not on this machine, so it cannot see
+  a %s plugged in here.
 
-  Simulation and lab-bc build work normally. For flashing, the board has to
-  be plugged into whatever machine runs the daemon.
+  %s The device has to be plugged into whatever
+  machine runs the daemon.
 
-`
+`, p.Label, p.Fallback)
 	case u.Identity.isDockerDesktop():
-		return `warning: Docker Desktop cannot pass USB devices into containers directly.
+		return fmt.Sprintf(`warning: Docker Desktop cannot pass your %s into a container.
 
-  Simulation (iverilog, cocotb) and remote builds (lab-bc) work normally.
+  %s
   Flashing and UART do not: Docker Desktop reaches USB only over USB/IP,
   which needs a privileged helper container held open for the session and
-  does not present the board at /dev/bus/usb. dev106 does not drive that.
+  does not present the device at /dev/bus/usb. dev106 does not drive that.
 
   Options, roughly in order of how much trouble they are:
     * Use OrbStack instead, which passes USB through natively.
-    * Flash from a Linux host or VM after building the bitstream here.
+    * Build here, then flash from a Linux host or VM.
 
-`
+`, p.Label, p.Fallback)
 	default:
+		flash := "  Build here, then flash from a Linux host or VM.\n"
+		if p.FlashExample != "" {
+			flash = fmt.Sprintf(`  Build here, then flash from a Linux host or VM:
+      %s
+`, p.FlashExample)
+		}
 		return fmt.Sprintf(`warning: %s cannot pass USB devices into containers.
 
-  Simulation (iverilog, cocotb) and remote builds (lab-bc) work normally.
-  Flashing the board and reading its UART do not.
+  %s
+  Flashing the %s and reading its UART do not.
 
-  Build the bitstream here, then flash from a Linux host or VM:
-      openFPGALoader -b urbana build/obj/final.bit
-
-`, platform)
+%s
+`, platform, p.Fallback, p.Label, flash)
 	}
 }
 
 // StaleContainerAdvice fires when the board showed up after creation, since
 // the device list is fixed then.
 func StaleContainerAdvice(u USBDevices, containerHasUSB bool) string {
-	if !u.Supported || !u.BoardFound() || containerHasUSB {
+	if !u.Supported || !u.DeviceFound() || containerHasUSB {
 		return ""
 	}
-	return `warning: this container was created without the FPGA board attached.
+	return fmt.Sprintf(`warning: this container was created without the %s attached.
 
-  The board is plugged in now, but a container's devices are fixed when it
-  is created. Pick it up with:
+  It is plugged in now, but a container's devices are fixed when it is
+  created. Pick it up with:
       dev106 restart
 
-`
+`, profileOrDefault(u.Profile).Label)
 }
 
 // workspaceAdvice keys off the filesystem type rather than the WSL detection,

@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/junikimm717/dev106/internal/config"
 	"github.com/junikimm717/dev106/internal/host"
@@ -186,13 +187,28 @@ func configCmd() *cobra.Command {
 			fmt.Printf("telerun      = %t\n", c.Telerun)
 			fmt.Printf("labbc        = %t\n", c.LabBC)
 			fmt.Printf("usb          = %t\n", c.USB)
-			// The effective list, not the raw strings: a malformed entry is
-			// dropped with a warning and must not look like it is in use.
-			if ids, _ := host.ParseUSBIDs(c.USBIDs); len(ids) > 0 {
-				fmt.Printf("usb_ids      = %s\n", host.FormatUSBIDs(ids))
-			} else {
-				fmt.Printf("usb_ids      = %s  (built-in)\n", host.FormatUSBIDs(host.DefaultUSBIDs))
+			// The effective profile, not the raw strings: a malformed entry
+			// is dropped with a warning and must not look like it is in use.
+			ids, _ := host.ParseUSBIDs(c.USBIDs)
+			profile, profileErr := host.Profile(c.USBProfile, c.USBLabel, ids)
+			name := c.USBProfile
+			if name == "" {
+				name = host.DefaultProfileName + "  (default)"
 			}
+			if profileErr != nil {
+				name = fmt.Sprintf("%s  (unknown, using %s)", c.USBProfile, host.DefaultProfileName)
+			}
+			builtin := ""
+			if len(ids) == 0 {
+				builtin = "  (from profile)"
+			}
+			fmt.Printf("usb_profile  = %s\n", name)
+			fmt.Printf("usb_label    = %q\n", profile.Label)
+			fmt.Printf("usb_ids      = %s%s\n", host.FormatUSBIDs(profile.IDs), builtin)
+			if profile.NeedsIDs() {
+				fmt.Printf("             ^ matches nothing until usb_ids is set\n")
+			}
+			fmt.Printf("             available profiles: %s\n", strings.Join(host.ProfileNames(), ", "))
 			return nil
 		},
 	}
