@@ -105,7 +105,13 @@ and a clangd preconfigured with the xv6 compile flags.
 on Apple Silicon.
 
 **6.205** ships Icarus Verilog 12, cocotb, pyserial, openFPGALoader, vicoco,
-and `lab-bc`, all on `PATH`.
+and `lab-bc`, all on `PATH`. They live in a venv at `/opt/6205_python`, which
+is owned by root so that starting a container does not mean chowning every
+file in it. Adding a package therefore needs sudo, which you have:
+
+```bash
+sudo pip install <package>
+```
 
 ## 6.2050: lab-bc and the FPGA board
 

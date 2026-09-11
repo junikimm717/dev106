@@ -18,3 +18,10 @@ export PATH=$HOME/go/bin:$PATH
 if test -n "$JAVA_HOME"; then
   export PATH=$JAVA_HOME/bin:$PATH
 fi
+
+# Last, so a course toolchain venv outranks everything above. /nvim ships its
+# own python, and without this it shadows the venv: the prompt says the venv
+# is active while `import cocotb` fails. Unset outside 6.205, so a no-op.
+if test -n "$VIRTUAL_ENV"; then
+  export PATH=$VIRTUAL_ENV/bin:$PATH
+fi
