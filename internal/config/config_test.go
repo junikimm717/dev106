@@ -1,4 +1,4 @@
-package cli
+package config
 
 import (
 	"os"
@@ -36,13 +36,13 @@ func TestLinuxPlatform(t *testing.T) {
 	on := true
 
 	forcedCfg := DevConfig{Image: "x", FollowHost: &off}
-	forced := forcedCfg.linuxPlatform()
+	forced := forcedCfg.LinuxPlatform()
 	if forced.OS != "linux" || forced.Architecture != "amd64" {
 		t.Fatalf("forced platform = %+v", forced)
 	}
 
 	hostCfg := DevConfig{Image: "x", FollowHost: &on}
-	host := hostCfg.linuxPlatform()
+	host := hostCfg.LinuxPlatform()
 	if host.OS != "linux" || host.Architecture != runtime.GOARCH {
 		t.Fatalf("host platform = %+v, GOARCH = %s", host, runtime.GOARCH)
 	}
@@ -73,7 +73,7 @@ func TestLoadConfigCreatesAndContinues(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", dir)
 
-	cfg, err := LoadConfig("")
+	cfg, err := Load("")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -91,7 +91,7 @@ func TestLoadConfigCreatesAndContinues(t *testing.T) {
 	}
 
 	// Second load must not rewrite or fail.
-	again, err := LoadConfig("")
+	again, err := Load("")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -111,7 +111,7 @@ func TestLoadConfigReportsPathOnBadTOML(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, err := LoadConfig("")
+	_, err := Load("")
 	if err == nil {
 		t.Fatal("expected parse error")
 	}
@@ -131,7 +131,7 @@ func TestLoadConfigEmptyImage(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, err := LoadConfig("")
+	_, err := Load("")
 	if err == nil {
 		t.Fatal("expected empty image error")
 	}
@@ -160,7 +160,7 @@ func TestRepoConfigOverlaysGlobal(t *testing.T) {
 	writeConfig(t, filepath.Join(root, RepoConfigName),
 		"image = \"mit_6205\"\nlabbc = true\nusb = true\n")
 
-	cfg, err := LoadConfig(root)
+	cfg, err := Load(root)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -186,7 +186,7 @@ func TestRepoConfigAbsentKeepsGlobal(t *testing.T) {
 	writeConfig(t, filepath.Join(dir, "dev106", "config.toml"),
 		"image = \"mit_6181\"\ntelerun = false\n")
 
-	cfg, err := LoadConfig(t.TempDir())
+	cfg, err := Load(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -210,7 +210,7 @@ func TestRepoConfigBadTOMLNamesTheRepoFile(t *testing.T) {
 	repoPath := filepath.Join(root, RepoConfigName)
 	writeConfig(t, repoPath, "image = [\n")
 
-	_, err := LoadConfig(root)
+	_, err := Load(root)
 	if err == nil {
 		t.Fatal("expected a parse error")
 	}

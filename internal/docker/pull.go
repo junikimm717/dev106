@@ -1,4 +1,4 @@
-package cli
+package docker
 
 import (
 	"encoding/json"
@@ -7,6 +7,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/junikimm717/dev106/internal/config"
 	dockerClient "github.com/moby/moby/client"
 	"github.com/opencontainers/image-spec/specs-go/v1"
 	"golang.org/x/term"
@@ -38,10 +39,7 @@ func newPullDisplay(out *os.File) *pullDisplay {
 }
 
 func layerLine(msg pullMessage) string {
-	id := msg.ID
-	if len(id) > 12 {
-		id = id[:12]
-	}
+	id := shortID(msg.ID)
 	if msg.Progress != "" {
 		return fmt.Sprintf("%s: %s %s", id, msg.Status, strings.TrimSpace(msg.Progress))
 	}
@@ -56,7 +54,7 @@ func (d *pullDisplay) handle(msg pullMessage) {
 		if msg.Status == "" {
 			return
 		}
-		d.breakBlock()
+		d.reset()
 		fmt.Fprintln(d.out, msg.Status)
 		return
 	}
@@ -109,24 +107,23 @@ func (d *pullDisplay) redraw() {
 	d.height = len(d.order)
 }
 
-func (d *pullDisplay) breakBlock() {
+// reset stops the next redraw from cursor-up over lines that are now
+// permanent, whether because a non-layer message interrupted the block or
+// because the pull is over.
+func (d *pullDisplay) reset() {
 	d.height = 0
 }
 
-func (d *pullDisplay) finish() {
-	d.height = 0
-}
-
-func (d *DevClient) Pull(config *DevConfig) error {
+func (d *DevClient) Pull(cfg *config.DevConfig) error {
 	resp, err := d.client.ImagePull(
 		d.ctx,
-		config.Image,
+		cfg.Image,
 		dockerClient.ImagePullOptions{
-			Platforms: []v1.Platform{config.linuxPlatform()},
+			Platforms: []v1.Platform{cfg.LinuxPlatform()},
 		},
 	)
 	if err != nil {
-		return fmt.Errorf("could not pull %s: %w", config.Image, err)
+		return fmt.Errorf("could not pull %s: %w", cfg.Image, err)
 	}
 	defer resp.Close()
 
@@ -147,14 +144,14 @@ func (d *DevClient) Pull(config *DevConfig) error {
 		}
 
 		if msg.Error != "" {
-			display.finish()
+			display.reset()
 			return fmt.Errorf("docker pull failed: %s", msg.Error)
 		}
 		display.handle(msg)
 	}
-	display.finish()
+	display.reset()
 
-	platform := config.linuxPlatform()
-	fmt.Printf("Pulled %s (%s/%s)\n", config.Image, platform.OS, platform.Architecture)
+	platform := cfg.LinuxPlatform()
+	fmt.Printf("Pulled %s (%s/%s)\n", cfg.Image, platform.OS, platform.Architecture)
 	return nil
 }

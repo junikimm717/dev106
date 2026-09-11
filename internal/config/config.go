@@ -1,4 +1,4 @@
-package cli
+package config
 
 import (
 	"errors"
@@ -88,7 +88,7 @@ func (c *DevConfig) followHost() bool {
 	return strings.Contains(c.Image, "6181") || strings.Contains(c.Image, "6205")
 }
 
-func (c *DevConfig) linuxPlatform() v1.Platform {
+func (c *DevConfig) LinuxPlatform() v1.Platform {
 	arch := "amd64"
 	if c.followHost() {
 		arch = runtime.GOARCH
@@ -99,9 +99,9 @@ func (c *DevConfig) linuxPlatform() v1.Platform {
 	}
 }
 
-// LoadConfig reads the global config, then layers RepoConfigName over it. A
+// Load reads the global config, then layers RepoConfigName over it. A
 // key absent from the repo file keeps its global value. Pass "" to skip.
-func LoadConfig(root string) (*DevConfig, error) {
+func Load(root string) (*DevConfig, error) {
 	path, err := configPath()
 	if err != nil {
 		return nil, err

@@ -1,12 +1,10 @@
-package cli
+package host
 
 import (
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
-
-	"github.com/moby/moby/api/types/container"
 )
 
 func TestUSBAdvice(t *testing.T) {
@@ -207,15 +205,6 @@ func TestSharedVMNeverReportsMissingBoard(t *testing.T) {
 	if got := usbAdvice(u, false, "Docker on macOS"); strings.Contains(got, "no FPGA board") {
 		t.Fatalf("must not claim the board is missing:\n%s", got)
 	}
-
-	hc := &container.HostConfig{}
-	applyUSB(hc, u)
-	if !containsString(hc.Binds, "/dev/bus/usb:/dev/bus/usb") {
-		t.Fatalf("shared VM should still get the bus bind: %v", hc.Binds)
-	}
-	if !containsString(hc.DeviceCgroupRules, usbCgroupRule) {
-		t.Fatalf("shared VM should still get the cgroup rule: %v", hc.DeviceCgroupRules)
-	}
 }
 
 func TestDetectUSBUnavailableTouchesNothing(t *testing.T) {
@@ -225,84 +214,32 @@ func TestDetectUSBUnavailableTouchesNothing(t *testing.T) {
 	}
 }
 
-func TestApplyUSB(t *testing.T) {
-	t.Run("unsupported host changes nothing", func(t *testing.T) {
-		hc := &container.HostConfig{Binds: []string{"/repo:/workspace:rw"}}
-		applyUSB(hc, USBDevices{Mode: USBUnavailable, Supported: false})
-		if len(hc.Binds) != 1 || len(hc.Devices) != 0 || len(hc.DeviceCgroupRules) != 0 {
-			t.Fatalf("host config was modified: %+v", hc)
-		}
-	})
-
-	t.Run("no bus dir changes nothing", func(t *testing.T) {
-		hc := &container.HostConfig{}
-		applyUSB(hc, USBDevices{Mode: USBHostDevices, Supported: true, BusDir: false, GroupIDs: []string{"46"}})
-		if len(hc.Binds) != 0 || len(hc.GroupAdd) != 0 {
-			t.Fatalf("host config was modified: %+v", hc)
-		}
-	})
-
-	t.Run("full passthrough", func(t *testing.T) {
-		hc := &container.HostConfig{Binds: []string{"/repo:/workspace:rw"}}
-		applyUSB(hc, USBDevices{
-			Mode:      USBHostDevices,
-			Supported: true,
-			BusDir:    true,
-			BoardNode: "/dev/bus/usb/001/007",
-			BoardGID:  46,
-			Serial:    []string{"/dev/ttyUSB0", "/dev/ttyUSB1"},
-			GroupIDs:  []string{"20", "46"},
-		})
-
-		if !containsString(hc.Binds, "/dev/bus/usb:/dev/bus/usb") {
-			t.Fatalf("usb bus not bind mounted: %v", hc.Binds)
-		}
-		if !containsString(hc.Binds, "/repo:/workspace:rw") {
-			t.Fatalf("existing binds were dropped: %v", hc.Binds)
-		}
-		if !containsString(hc.DeviceCgroupRules, usbCgroupRule) {
-			t.Fatalf("missing cgroup rule: %v", hc.DeviceCgroupRules)
-		}
-		if len(hc.Devices) != 2 {
-			t.Fatalf("expected both serial nodes, got %+v", hc.Devices)
-		}
-		for _, d := range hc.Devices {
-			if d.PathOnHost != d.PathInContainer {
-				t.Fatalf("serial node path changed: %+v", d)
-			}
-		}
-		if len(hc.GroupAdd) != 2 {
-			t.Fatalf("expected both gids, got %v", hc.GroupAdd)
-		}
-	})
-}
-
 func TestStaleContainerAdvice(t *testing.T) {
 	board := USBDevices{Mode: USBHostDevices, Supported: true, BusDir: true, BoardNode: "/dev/bus/usb/001/007", BoardGID: 46}
 
-	if got := staleContainerAdvice(board, false); !strings.Contains(got, "dev106 restart") {
+	if got := StaleContainerAdvice(board, false); !strings.Contains(got, "dev106 restart") {
 		t.Fatalf("board plugged in after creation should suggest restart, got %q", got)
 	}
-	if got := staleContainerAdvice(board, true); got != "" {
+	if got := StaleContainerAdvice(board, true); got != "" {
 		t.Fatalf("container already has usb, expected silence, got %q", got)
 	}
-	if got := staleContainerAdvice(USBDevices{Mode: USBHostDevices, Supported: true, BusDir: true}, false); got != "" {
+	if got := StaleContainerAdvice(USBDevices{Mode: USBHostDevices, Supported: true, BusDir: true}, false); got != "" {
 		t.Fatalf("no board means the plain warning already fired, got %q", got)
 	}
-	if got := staleContainerAdvice(USBDevices{Mode: USBUnavailable, Supported: false}, false); got != "" {
+	if got := StaleContainerAdvice(USBDevices{Mode: USBUnavailable, Supported: false}, false); got != "" {
 		t.Fatalf("unsupported host, expected silence, got %q", got)
 	}
 }
 
 func TestContainerHasUSBPassthrough(t *testing.T) {
-	if !containerHasUSBPassthrough([]string{"/repo:/workspace:rw", "/dev/bus/usb:/dev/bus/usb"}) {
+	if !ContainerHasUSBPassthrough([]string{"/repo:/workspace:rw", "/dev/bus/usb:/dev/bus/usb"}) {
 		t.Fatal("should have detected the usb bind")
 	}
-	if containerHasUSBPassthrough([]string{"/repo:/workspace:rw"}) {
+	if ContainerHasUSBPassthrough([]string{"/repo:/workspace:rw"}) {
 		t.Fatal("false positive on a plain bind list")
 	}
 	// A repo that happens to be named like the bus must not count.
-	if containerHasUSBPassthrough([]string{"/home/x/dev/bus/usbthing:/workspace:rw"}) {
+	if ContainerHasUSBPassthrough([]string{"/home/x/dev/bus/usbthing:/workspace:rw"}) {
 		t.Fatal("false positive on a lookalike path")
 	}
 }

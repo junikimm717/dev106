@@ -1,6 +1,6 @@
 //go:build !linux
 
-package cli
+package host
 
 // Only Linux has host USB devices to scan; DetectUSB never calls this
 // otherwise.

@@ -1,6 +1,6 @@
 //go:build linux
 
-package cli
+package host
 
 import (
 	"fmt"
@@ -59,7 +59,7 @@ func findBoard() string {
 		if err != nil {
 			continue
 		}
-		node := fmt.Sprintf("%s/%03d/%03d", usbBusDir, bus, dev)
+		node := fmt.Sprintf("%s/%03d/%03d", USBBusDir, bus, dev)
 		if _, err := os.Stat(node); err == nil {
 			return node
 		}
@@ -82,7 +82,7 @@ func serialNodes() []string {
 
 // scanHostUSB is only meaningful when the daemon shares our /dev.
 func scanHostUSB(u *USBDevices) {
-	if info, err := os.Stat(usbBusDir); err == nil && info.IsDir() {
+	if info, err := os.Stat(USBBusDir); err == nil && info.IsDir() {
 		u.BusDir = true
 	}
 

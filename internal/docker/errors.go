@@ -1,4 +1,4 @@
-package cli
+package docker
 
 // ExitError is a command failure that should become the process exit code
 // without being rewritten as a generic status-1 error.
