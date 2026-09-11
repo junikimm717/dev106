@@ -40,27 +40,32 @@ func New(ctx context.Context, cfg *config.DevConfig) (*DevClient, error) {
 		return nil, fmt.Errorf("could not connect to Docker; is the daemon running?\n%w", err)
 	}
 
-	// A typo here must not stop a shell opening, so report it and carry on
-	// with whatever parsed.
+	// Resolve the profile whatever the course, but only complain about it to
+	// someone who turned USB on: 6.106 and 6.181 never pass a device through,
+	// and USB chatter in their shell is noise about a key they do not use.
 	var ids []host.USBID
 	label, name := "", ""
+	var bad []string
+	usbOn := cfg != nil && cfg.USB
 	if cfg != nil {
-		var bad []string
 		ids, bad = host.ParseUSBIDs(cfg.USBIDs)
-		for _, entry := range bad {
-			fmt.Fprintf(os.Stderr, "warning: ignoring malformed usb_ids entry %q; expected \"vid:pid\"\n", entry)
-		}
 		label = cfg.USBLabel
 		name = cfg.USBProfile
 	}
 
+	// A typo must not stop a shell opening, so report it and carry on with
+	// whatever parsed.
 	profile, err := host.Profile(name, label, ids)
-	if err != nil {
-		// An unknown profile name is a typo, not a reason to refuse a shell.
-		fmt.Fprintf(os.Stderr, "warning: %v; using %q\n", err, host.DefaultProfileName)
-	}
-	if profile.NeedsIDs() {
-		fmt.Fprintf(os.Stderr, "warning: usb_profile %q matches nothing until you set usb_ids\n", name)
+	if usbOn {
+		for _, entry := range bad {
+			fmt.Fprintf(os.Stderr, "warning: ignoring malformed usb_ids entry %q; expected \"vid:pid\"\n", entry)
+		}
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "warning: %v; using %q\n", err, host.DefaultProfileName)
+		}
+		if profile.NeedsIDs() {
+			fmt.Fprintf(os.Stderr, "warning: usb_profile %q matches nothing until you set usb_ids\n", name)
+		}
 	}
 
 	return &DevClient{

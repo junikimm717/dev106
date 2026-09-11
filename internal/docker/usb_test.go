@@ -1,6 +1,11 @@
 package docker
 
 import (
+	"context"
+	"github.com/junikimm717/dev106/internal/config"
+	"io"
+	"os"
+	"strings"
 	"testing"
 
 	"github.com/junikimm717/dev106/internal/host"
@@ -79,5 +84,45 @@ func TestApplyUSBSharedVM(t *testing.T) {
 	}
 	if !containsString(hc.DeviceCgroupRules, host.USBCgroupRule) {
 		t.Fatalf("shared VM should still get the cgroup rule: %v", hc.DeviceCgroupRules)
+	}
+}
+
+// 6.106 and 6.181 never pass a device through, so USB config problems must
+// stay silent for them -- a warning about a key they do not use is noise.
+func TestUSBConfigWarningsOnlyWhenUSBIsOn(t *testing.T) {
+	broken := &config.DevConfig{
+		Image:      "ghcr.io/junikimm717/dev106/mit_6181:latest",
+		USBIDs:     []string{"garbage"},
+		USBProfile: "nonsense",
+	}
+
+	for _, tc := range []struct {
+		name string
+		usb  bool
+		want bool
+	}{
+		{name: "usb off stays silent", usb: false, want: false},
+		{name: "usb on reports", usb: true, want: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			broken.USB = tc.usb
+			stderr := os.Stderr
+			r, w, err := os.Pipe()
+			if err != nil {
+				t.Fatal(err)
+			}
+			os.Stderr = w
+			_, newErr := New(context.Background(), broken)
+			w.Close()
+			os.Stderr = stderr
+
+			out, _ := io.ReadAll(r)
+			if newErr != nil {
+				t.Skipf("no docker daemon here: %v", newErr)
+			}
+			if got := strings.Contains(string(out), "usb"); got != tc.want {
+				t.Fatalf("usb=%t produced %q, wanted warnings=%t", tc.usb, out, tc.want)
+			}
+		})
 	}
 }
