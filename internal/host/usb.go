@@ -6,11 +6,80 @@ import (
 	"strings"
 )
 
-// The Urbana board's FTDI FT2232H.
-const (
-	fpgaVendorID  = "0403"
-	fpgaProductID = "6010"
-)
+// USBID is a USB vendor:product pair, lowercase hex without the 0x.
+type USBID struct{ Vendor, Product string }
+
+func (id USBID) String() string { return id.Vendor + ":" + id.Product }
+
+// DefaultUSBIDs are the FTDI parts openFPGALoader drives as JTAG bridges.
+// One ID is not enough: Digilent alone spans two, so pinning 6010 would call
+// an HS2 or a JTAG-SMT2 board missing.
+//
+// The UART-only FT232RL (6001) and FT231X (6015) are left out deliberately.
+// openFPGALoader can bit-bang JTAG over them, but they are also the most
+// common plain serial chips in existence, and telling someone their Arduino
+// is a detached FPGA is a worse failure than not recognising a rare cable.
+// Add those explicitly with usb_ids if you have such a programmer.
+var DefaultUSBIDs = []USBID{
+	{"0403", "6010"}, // FT2232H: Urbana, Arty, most Digilent boards
+	{"0403", "6011"}, // FT4232H
+	{"0403", "6014"}, // FT232H: Digilent HS2/HS3, JTAG-SMT2
+	{"0403", "6043"}, // FT4232HP
+}
+
+// ParseUSBIDs reads "vid:pid" strings from config. Malformed entries are
+// returned rather than rejected, so one typo cannot stop a shell opening.
+func ParseUSBIDs(raw []string) (ids []USBID, bad []string) {
+	for _, entry := range raw {
+		vendor, product, found := strings.Cut(strings.TrimSpace(entry), ":")
+		vendor = strings.TrimPrefix(strings.ToLower(vendor), "0x")
+		product = strings.TrimPrefix(strings.ToLower(product), "0x")
+		if !found || !isHex(vendor) || !isHex(product) {
+			bad = append(bad, entry)
+			continue
+		}
+		ids = append(ids, USBID{vendor, product})
+	}
+	return ids, bad
+}
+
+func isHex(s string) bool {
+	if s == "" {
+		return false
+	}
+	for _, r := range s {
+		if (r < '0' || r > '9') && (r < 'a' || r > 'f') {
+			return false
+		}
+	}
+	return true
+}
+
+// usbIDsOrDefault keeps a caller that passes nothing on the default list.
+func usbIDsOrDefault(ids []USBID) []USBID {
+	if len(ids) == 0 {
+		return DefaultUSBIDs
+	}
+	return ids
+}
+
+func matchesID(vidPID string, ids []USBID) bool {
+	for _, id := range ids {
+		if strings.EqualFold(vidPID, id.String()) {
+			return true
+		}
+	}
+	return false
+}
+
+// FormatUSBIDs renders a list for a warning.
+func FormatUSBIDs(ids []USBID) string {
+	out := make([]string, 0, len(ids))
+	for _, id := range ids {
+		out = append(out, id.String())
+	}
+	return strings.Join(out, ", ")
+}
 
 // Whole USB major, so a replug does not need a new container.
 const USBCgroupRule = "c 189:* rmw"
@@ -93,6 +162,11 @@ type USBDevices struct {
 	BoardAttached bool
 	// BoardID identifies the board to `orb usb attach`.
 	BoardID string
+	// BoardVidPID is the ID we actually matched, not the one we assumed.
+	BoardVidPID string
+
+	// IDs is what we searched for, so a warning can say so.
+	IDs []USBID
 }
 
 func (u USBDevices) BoardFound() bool { return u.BoardNode != "" }
@@ -120,13 +194,14 @@ func ContainerHasUSBPassthrough(binds []string) bool {
 }
 
 // Detect resolves how this daemon reaches USB, then probes accordingly.
-func Detect(id DaemonIdentity) USBDevices {
-	return DetectUSB(daemonUSBMode(id, runtime.GOOS == "linux"), id)
+func Detect(id DaemonIdentity, ids []USBID) USBDevices {
+	return DetectUSB(daemonUSBMode(id, runtime.GOOS == "linux"), id, ids)
 }
 
 // DetectUSB reports what the daemon can hand a container.
-func DetectUSB(mode DaemonUSBMode, id DaemonIdentity) USBDevices {
-	u := USBDevices{Mode: mode, Identity: id, Supported: mode != USBUnavailable}
+func DetectUSB(mode DaemonUSBMode, id DaemonIdentity, ids []USBID) USBDevices {
+	ids = usbIDsOrDefault(ids)
+	u := USBDevices{Mode: mode, Identity: id, Supported: mode != USBUnavailable, IDs: ids}
 	switch mode {
 	case USBHostDevices:
 		scanHostUSB(&u)
@@ -134,7 +209,7 @@ func DetectUSB(mode DaemonUSBMode, id DaemonIdentity) USBDevices {
 		// Cannot stat the VM's bus from here; the daemon resolves the bind.
 		u.BusDir = true
 		u.Serial = orbSerialPorts()
-		u.BoardID, u.BoardAttached, u.AttachKnown = orbBoard()
+		u.BoardID, u.BoardVidPID, u.BoardAttached, u.AttachKnown = orbBoard(ids)
 
 		// The node is root:root 0660 inside the VM. No udev rule of ours runs
 		// there, and a chown at startup would not survive a replug (the device
@@ -167,25 +242,28 @@ func platformName() string {
 //
 // Lines are "ID  VID:PID  NAME  STATE", NAME is multi-word, and STATE is blank
 // when detached, so the last field is the only reliable place to look.
-func orbBoard() (id string, attached, known bool) {
+func orbBoard(ids []USBID) (id, vidPID string, attached, known bool) {
 	orb, err := exec.LookPath("orb")
 	if err != nil {
-		return "", false, false
+		return "", "", false, false
 	}
 	out, err := exec.Command(orb, "usb", "list").Output()
 	if err != nil {
-		return "", false, false
+		return "", "", false, false
 	}
 
 	for _, line := range strings.Split(string(out), "\n") {
 		fields := strings.Fields(line)
-		if len(fields) < 3 || !strings.EqualFold(fields[1], fpgaVendorID+":"+fpgaProductID) {
+		if len(fields) < 3 || !matchesID(fields[1], ids) {
 			continue
 		}
-		return fields[0], fields[len(fields)-1] == "attached", true
+		return fields[0], fields[1], fields[len(fields)-1] == "attached", true
 	}
-	// orb answered and the board was not in it, so it is genuinely unplugged.
-	return "", false, true
+
+	// Nothing we recognise. That is NOT "your board is detached" -- it may be
+	// a programmer that is not in our list at all, and saying otherwise names
+	// a command that cannot help. Stay unknown and let the hedged note run.
+	return "", "", false, false
 }
 
 // orbSerialPorts lists the macOS serial ports OrbStack forwards into the VM.

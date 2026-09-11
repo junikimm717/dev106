@@ -39,15 +39,17 @@ func sysfsField(dir, name string) string {
 	return strings.TrimSpace(string(b))
 }
 
-// findBoard walks sysfs for the FT2232H and resolves its /dev/bus/usb node.
-func findBoard() string {
+// findBoard walks sysfs for a known programmer and resolves its /dev/bus/usb
+// node.
+func findBoard(ids []USBID) string {
 	entries, err := os.ReadDir(sysfsUSBDir)
 	if err != nil {
 		return ""
 	}
 	for _, entry := range entries {
 		dir := filepath.Join(sysfsUSBDir, entry.Name())
-		if sysfsField(dir, "idVendor") != fpgaVendorID || sysfsField(dir, "idProduct") != fpgaProductID {
+		vidPID := sysfsField(dir, "idVendor") + ":" + sysfsField(dir, "idProduct")
+		if !matchesID(vidPID, ids) {
 			continue
 		}
 		// Decimal in sysfs, zero padded in /dev, so parse rather than concat.
@@ -88,7 +90,7 @@ func scanHostUSB(u *USBDevices) {
 
 	gids := map[int]bool{}
 
-	if node := findBoard(); node != "" {
+	if node := findBoard(u.IDs); node != "" {
 		u.BoardNode = node
 		if gid, ok := nodeGID(node); ok {
 			u.BoardGID = gid

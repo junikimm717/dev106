@@ -26,7 +26,11 @@ func usbAdvice(u USBDevices, wsl bool, platform string) string {
 			if target == "" {
 				target = "<id>"
 			}
-			return fmt.Sprintf(`warning: the FPGA board (%s:%s) is not attached to OrbStack's VM,
+			which := u.BoardVidPID
+			if which == "" {
+				which = FormatUSBIDs(usbIDsOrDefault(u.IDs))
+			}
+			return fmt.Sprintf(`warning: the FPGA board (%s) is not attached to OrbStack's VM,
   so openFPGALoader cannot see it.
 
   Attach it:
@@ -34,7 +38,7 @@ func usbAdvice(u USBDevices, wsl bool, platform string) string {
 
   Simulation and `+"`lab-bc build`"+` work without it.
 
-`, fpgaVendorID, fpgaProductID, target)
+`, which, target)
 		}
 
 		// orb did not answer, so this is a pointer, not a diagnosis.
@@ -62,22 +66,30 @@ func usbAdvice(u USBDevices, wsl bool, platform string) string {
 	}
 
 	if !u.BoardFound() {
+		// usbipd wants one ID, so show the commonest rather than the whole
+		// list; the line below says what else would have counted.
+		ids := usbIDsOrDefault(u.IDs)
+		example := ids[0].String()
 		fix := "  Plug the board in, then run `dev106 restart`.\n"
 		if wsl {
-			fix = `  WSL2 does not see USB devices until you attach them from Windows.
+			fix = fmt.Sprintf(`  WSL2 does not see USB devices until you attach them from Windows.
   In an admin PowerShell:
       usbipd list
-      usbipd bind   --hardware-id 0403:6010
-      usbipd attach --wsl --hardware-id 0403:6010
-  Then run ` + "`dev106 restart`" + `.
-`
+      usbipd bind   --hardware-id %s
+      usbipd attach --wsl --hardware-id %s
+  Then run `+"`dev106 restart`"+`.
+`, example, example)
 		}
-		return fmt.Sprintf(`warning: no FPGA board (%s:%s) is visible to dev106.
+		return fmt.Sprintf(`warning: no FPGA board is visible to dev106.
+
+  Looked for %s. If your programmer is not one of those, name it in your
+  dev106 config:
+      usb_ids = ["vvvv:pppp"]
 
   Simulation and `+"`lab-bc build`"+` work fine. Flashing will not.
 
 %s
-`, fpgaVendorID, fpgaProductID, fix)
+`, FormatUSBIDs(ids), fix)
 	}
 
 	return ""

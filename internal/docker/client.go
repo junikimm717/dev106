@@ -22,11 +22,12 @@ type DevClient struct {
 	client *dockerClient.Client
 	ctx    context.Context
 
+	usbIDs  []host.USBID
 	usbOnce sync.Once
 	usb     host.USBDevices
 }
 
-func New(ctx context.Context) (*DevClient, error) {
+func New(ctx context.Context, cfg *config.DevConfig) (*DevClient, error) {
 	// Docker Desktop rewrites bind mount paths in an API proxy behind the
 	// distro's unix socket; tcp:// skips that proxy and the bind silently
 	// degrades to an empty volume rather than failing.
@@ -38,9 +39,22 @@ func New(ctx context.Context) (*DevClient, error) {
 	if err != nil {
 		return nil, fmt.Errorf("could not connect to Docker; is the daemon running?\n%w", err)
 	}
+
+	// A typo here must not stop a shell opening, so report it and carry on
+	// with whatever parsed.
+	var ids []host.USBID
+	if cfg != nil {
+		var bad []string
+		ids, bad = host.ParseUSBIDs(cfg.USBIDs)
+		for _, entry := range bad {
+			fmt.Fprintf(os.Stderr, "warning: ignoring malformed usb_ids entry %q; expected \"vid:pid\"\n", entry)
+		}
+	}
+
 	return &DevClient{
 		client: client,
 		ctx:    ctx,
+		usbIDs: ids,
 	}, nil
 }
 
@@ -67,7 +81,7 @@ func (d *DevClient) daemonIdentity() host.DaemonIdentity {
 func (d *DevClient) USB() host.USBDevices {
 	d.usbOnce.Do(func() {
 		id := d.daemonIdentity()
-		d.usb = host.Detect(id)
+		d.usb = host.Detect(id, d.usbIDs)
 	})
 	return d.usb
 }

@@ -83,6 +83,7 @@ func TestUSBAdvice(t *testing.T) {
 				BusDir:      true,
 				AttachKnown: true,
 				BoardID:     "00100000",
+				BoardVidPID: "0403:6010",
 				Identity:    DaemonIdentity{OperatingSystem: "OrbStack"},
 			},
 			platform: "Docker on macOS",
@@ -227,7 +228,7 @@ func TestSharedVMNeverReportsMissingBoard(t *testing.T) {
 	// the developer happens to have plugged in.
 	t.Setenv("PATH", t.TempDir())
 
-	u := DetectUSB(USBSharedVM, DaemonIdentity{OperatingSystem: "OrbStack"})
+	u := DetectUSB(USBSharedVM, DaemonIdentity{OperatingSystem: "OrbStack"}, nil)
 
 	if u.Enumerable() {
 		t.Fatal("a shared-VM daemon is not enumerable from here")
@@ -241,7 +242,7 @@ func TestSharedVMNeverReportsMissingBoard(t *testing.T) {
 }
 
 func TestDetectUSBUnavailableTouchesNothing(t *testing.T) {
-	u := DetectUSB(USBUnavailable, DaemonIdentity{OperatingSystem: "Docker Desktop"})
+	u := DetectUSB(USBUnavailable, DaemonIdentity{OperatingSystem: "Docker Desktop"}, nil)
 	if u.Supported || u.BusDir || u.BoardFound() || len(u.Serial) != 0 {
 		t.Fatalf("unavailable mode should be empty: %+v", u)
 	}
@@ -344,7 +345,9 @@ func TestOrbBoard(t *testing.T) {
 	cases := []struct {
 		name         string
 		out          string
+		ids          []USBID
 		wantID       string
+		wantVidPID   string
 		wantAttached bool
 		wantKnown    bool
 	}{
@@ -352,30 +355,58 @@ func TestOrbBoard(t *testing.T) {
 			name:         "attached board",
 			out:          "00100000  0403:6010  Xilinx JTAG+Serial  attached",
 			wantID:       "00100000",
+			wantVidPID:   "0403:6010",
 			wantAttached: true,
 			wantKnown:    true,
 		},
 		{
-			name:      "detached board has a blank state column",
-			out:       "00100000  0403:6010  Xilinx JTAG+Serial  ",
-			wantID:    "00100000",
-			wantKnown: true,
+			name:       "detached board has a blank state column",
+			out:        "00100000  0403:6010  Xilinx JTAG+Serial  ",
+			wantID:     "00100000",
+			wantVidPID: "0403:6010",
+			wantKnown:  true,
 		},
 		{
-			// orb answered, so "not listed" really does mean unplugged.
-			name:      "board absent but other devices present",
-			out:       "00200000  05ac:8103  Apple Keyboard  attached",
-			wantKnown: true,
+			// Digilent HS2/HS3 and JTAG-SMT2 are 6014, not 6010. Pinning one
+			// ID called these boards missing.
+			name:         "ft232h programmer is recognised too",
+			out:          "00300000  0403:6014  Digilent USB Device  attached",
+			wantID:       "00300000",
+			wantVidPID:   "0403:6014",
+			wantAttached: true,
+			wantKnown:    true,
 		},
 		{
-			name:      "empty list is still an answer",
-			out:       "",
-			wantKnown: true,
+			// Nothing we know is not the same as nothing plugged in, so we
+			// must not claim to know. Saying "detached" here would name an
+			// `orb usb attach` that cannot help.
+			name: "unrecognised devices leave us unknown, not detached",
+			out:  "00200000  05ac:8103  Apple Keyboard  attached",
+		},
+		{
+			name: "empty list tells us nothing either",
+			out:  "",
+		},
+		{
+			// A UART-only FTDI part must not be mistaken for a programmer.
+			name: "plain serial adapter is not a board",
+			out:  "00400000  0403:6001  USB Serial  attached",
 		},
 		{
 			name:         "board among others",
 			out:          "00200000  05ac:8103  Apple Keyboard  attached\n00100000  0403:6010  Xilinx JTAG+Serial  attached",
 			wantID:       "00100000",
+			wantVidPID:   "0403:6010",
+			wantAttached: true,
+			wantKnown:    true,
+		},
+		{
+			// An unusual programmer works once it is named in the config.
+			name:         "configured id overrides the defaults",
+			out:          "00500000  1d50:6018  Some Other Probe  attached",
+			ids:          []USBID{{"1d50", "6018"}},
+			wantID:       "00500000",
+			wantVidPID:   "1d50:6018",
 			wantAttached: true,
 			wantKnown:    true,
 		},
@@ -384,22 +415,58 @@ func TestOrbBoard(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			fakeOrb(t, tc.out)
-			id, attached, known := orbBoard()
-			if id != tc.wantID || attached != tc.wantAttached || known != tc.wantKnown {
-				t.Fatalf("orbBoard() = (%q, %v, %v), want (%q, %v, %v)",
-					id, attached, known, tc.wantID, tc.wantAttached, tc.wantKnown)
+			ids := tc.ids
+			if ids == nil {
+				ids = DefaultUSBIDs
+			}
+			id, vidPID, attached, known := orbBoard(ids)
+			if id != tc.wantID || vidPID != tc.wantVidPID || attached != tc.wantAttached || known != tc.wantKnown {
+				t.Fatalf("orbBoard() = (%q, %q, %v, %v), want (%q, %q, %v, %v)",
+					id, vidPID, attached, known, tc.wantID, tc.wantVidPID, tc.wantAttached, tc.wantKnown)
 			}
 		})
+	}
+}
+
+func TestParseUSBIDs(t *testing.T) {
+	ids, bad := ParseUSBIDs([]string{"0403:6010", "0x0403:0x6014", " 1D50:6018 ", "nope", "0403:", ""})
+
+	want := []USBID{{"0403", "6010"}, {"0403", "6014"}, {"1d50", "6018"}}
+	if len(ids) != len(want) {
+		t.Fatalf("ParseUSBIDs() = %v, want %v", ids, want)
+	}
+	for i, w := range want {
+		if ids[i] != w {
+			t.Fatalf("ParseUSBIDs()[%d] = %v, want %v", i, ids[i], w)
+		}
+	}
+	if len(bad) != 3 {
+		t.Fatalf("expected 3 malformed entries, got %v", bad)
+	}
+}
+
+// A board that is plugged in but not one we know must not be announced as
+// detached, because `orb usb attach` would not fix it.
+func TestUnknownProgrammerDoesNotClaimDetached(t *testing.T) {
+	fakeOrb(t, "00200000  05ac:8103  Apple Keyboard  attached")
+
+	u := DetectUSB(USBSharedVM, DaemonIdentity{OperatingSystem: "OrbStack"}, nil)
+	if u.BoardDetached() {
+		t.Fatal("an unrecognised device list is not evidence the board is detached")
+	}
+	got := usbAdvice(u, false, "Docker on macOS")
+	if !strings.HasPrefix(got, "note:") {
+		t.Fatalf("should fall back to the hedged note:\n%s", got)
 	}
 }
 
 // Without orb we know nothing, which must not be mistaken for "detached".
 func TestOrbBoardWithoutOrb(t *testing.T) {
 	t.Setenv("PATH", t.TempDir())
-	if id, attached, known := orbBoard(); id != "" || attached || known {
-		t.Fatalf("orbBoard() = (%q, %v, %v), want empty and unknown", id, attached, known)
+	if id, vidPID, attached, known := orbBoard(DefaultUSBIDs); id != "" || vidPID != "" || attached || known {
+		t.Fatalf("orbBoard() = (%q, %q, %v, %v), want empty and unknown", id, vidPID, attached, known)
 	}
-	u := DetectUSB(USBSharedVM, DaemonIdentity{OperatingSystem: "OrbStack"})
+	u := DetectUSB(USBSharedVM, DaemonIdentity{OperatingSystem: "OrbStack"}, nil)
 	if u.BoardDetached() {
 		t.Fatal("not being able to ask is not the same as detached")
 	}
@@ -410,7 +477,7 @@ func TestOrbBoardWithoutOrb(t *testing.T) {
 // silently blocked on permissions.
 func TestSharedVMJoinsRootGroup(t *testing.T) {
 	t.Setenv("PATH", t.TempDir())
-	u := DetectUSB(USBSharedVM, DaemonIdentity{OperatingSystem: "OrbStack"})
+	u := DetectUSB(USBSharedVM, DaemonIdentity{OperatingSystem: "OrbStack"}, nil)
 	if !containsString(u.GroupIDs, "0") {
 		t.Fatalf("shared VM should join the root group, got %v", u.GroupIDs)
 	}

@@ -41,7 +41,7 @@ func newApp(allowNoRoot bool) (*App, error) {
 		return nil, err
 	}
 	ctx := context.Background()
-	client, err := docker.New(ctx)
+	client, err := docker.New(ctx, config)
 	if err != nil {
 		return nil, err
 	}

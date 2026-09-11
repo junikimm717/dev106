@@ -25,6 +25,10 @@ type DevConfig struct {
 	LabBC      bool   `toml:"labbc"`
 	USB        bool   `toml:"usb"`
 
+	// USBIDs overrides the built-in programmer list, as "vid:pid" strings.
+	// Empty means the defaults.
+	USBIDs []string `toml:"usb_ids"`
+
 	// Where the values came from, for `dev106 config`.
 	GlobalPath string `toml:"-"`
 	RepoPath   string `toml:"-"`

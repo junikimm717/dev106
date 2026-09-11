@@ -186,6 +186,29 @@ the bitstream in the container and flash from a Linux host.
 None of this blocks you. Simulation (iverilog, cocotb) and `lab-bc build` need
 no board at all — only flashing and UART do.
 
+#### Which programmers are recognised
+
+dev106 looks for the FTDI parts openFPGALoader drives as JTAG bridges:
+`0403:6010` (FT2232H — Urbana, Arty, most Digilent boards), `0403:6011`
+(FT4232H), `0403:6014` (FT232H — Digilent HS2/HS3, JTAG-SMT2), and `0403:6043`
+(FT4232HP).
+
+The UART-only FT232RL (`0403:6001`) and FT231X (`0403:6015`) are deliberately
+excluded. openFPGALoader can bit-bang JTAG over them, but they are also the
+most common plain serial chips in existence, and mistaking a USB-serial
+adapter for your board produces confidently wrong advice.
+
+For anything else, name it yourself — no dev106 release required:
+
+```toml
+usb_ids = ["1d50:6018"]
+```
+
+This replaces the list rather than adding to it, so include the built-in IDs
+too if you still want them. Passthrough itself binds the whole USB bus and
+does not depend on this list; the IDs only decide what dev106 *reports*, so an
+unlisted programmer still works, it just is not mentioned.
+
 ### Editor tooling
 
 The `nvim_6205` image ships verible, svlangserver, pyright, and ruff, with
@@ -273,6 +296,16 @@ can flash and it still fails:
   `orb usb attach` and a replug both take effect in a running container. The
   container user joins the root group there, because the node OrbStack creates
   inside its VM is `root:root` and no udev rule of ours runs in that VM.
+- **`orb usb list` can say `attached` when the device node does not exist.**
+  A detach/reattach cycle can leave it in this state, and then dev106 stays
+  quiet (it believes orb) while openFPGALoader reports `-3 (device not found)`
+  rather than the `-4 (usb_open() failed)` you get from a permissions problem.
+  Check whether the node is really there:
+  ```bash
+  dev106 exec ls /dev/bus/usb/001
+  ```
+  If only the root hub is listed, cycle it — `orb usb detach <id>` then
+  `orb usb attach <id>` — and the node comes back with a new device number.
 - On Linux, a board owned by root means the udev rule is missing:
   ```bash
   sudo curl -fsSL -o /etc/udev/rules.d/99-openfpgaloader.rules \

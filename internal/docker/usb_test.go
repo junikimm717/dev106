@@ -72,7 +72,7 @@ func containsString(haystack []string, needle string) bool {
 // point of trusting the VM rather than scanning for a board.
 func TestApplyUSBSharedVM(t *testing.T) {
 	hc := &container.HostConfig{}
-	applyUSB(hc, host.Detect(host.DaemonIdentity{OperatingSystem: "OrbStack"}))
+	applyUSB(hc, host.Detect(host.DaemonIdentity{OperatingSystem: "OrbStack"}, nil))
 
 	if !containsString(hc.Binds, "/dev/bus/usb:/dev/bus/usb") {
 		t.Fatalf("shared VM should still get the bus bind: %v", hc.Binds)
