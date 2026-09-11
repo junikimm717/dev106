@@ -251,6 +251,19 @@ can flash and it still fails:
   ```
   Then replug the board.
 
+**xv6: gdb connects to nothing, or rejects `riscv:rv64`**
+The 6.181 image handles both of these, so if you hit them you are on an image
+built before this was fixed — re-pull. `make qemu-gdb` says to run `gdb`, but
+Debian's plain gdb is native-only; the image points `gdb` at `gdb-multiarch`,
+which speaks RISC-V. The same target writes a `.gdbinit` at the repo root
+carrying your port and `target remote`, and gdb refuses to auto-load a gdbinit
+outside its safe path, which leaves you attached to nothing. The image trusts
+`/workspace` for exactly that reason. Outside dev106, the equivalent is:
+
+```bash
+echo "add-auto-load-safe-path $(pwd)" >> ~/.config/gdb/gdbinit
+```
+
 **A power cycle killed the UART**
 Serial nodes only exist while the board is plugged in. `dev106 restart`.
 
