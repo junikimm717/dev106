@@ -116,14 +116,16 @@ consequences:
   precision of 1e0"*. Put `` `timescale 1ns / 1ps `` at the top of your
   sources.
 
-[vicoco](https://fpga.mit.edu/6205/F26/documentation/vicoco) is installed, but
-**not from the branch its docs name.** The documented
-`pip install git+...@stable` still pins `cocotb==1.9.2`, so following it
-verbatim either fails to resolve or drags cocotb back to a version where the
-`cocotb_tools.runner` import the course boilerplate uses does not exist. The
-image installs the `upgrade_cocotb_2_0` branch instead, pinned to a commit
-since it is unmerged and moving. `from vicoco.vivado_runner import get_runner`
-works as documented. Revert to `@stable` once upstream merges.
+[vicoco](https://fpga.mit.edu/6205/F26/documentation/vicoco) is **not
+installed**: course staff say it is not needed for now. It also cannot be
+installed as documented — `pip install git+...@stable` still pins
+`cocotb==1.9.2`, which would drag cocotb back to a version where the
+`cocotb_tools.runner` import the boilerplate uses does not exist.
+
+You do not need a local copy to run the Vivado path. `lab-bc simulate` runs on
+MIT's servers, which supply their own vicoco and their own cocotb; nothing
+about your container's Python affects it. If the course later asks you to
+import `vicoco.vivado_runner` locally, say so and it can go back in.
 
 All of it lives in a venv at `/opt/6205_python`, owned by root so that
 starting a container does not mean chowning every file in it. Adding a

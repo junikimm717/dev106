@@ -297,23 +297,14 @@ COPY docker/install_6205.sh /tmp/install_6205.sh
 # `from cocotb_tools.runner import get_runner` failing. Pinned rather than
 # left floating so the image is reproducible.
 #
-# --no-vicoco: the installer would take vicoco's @stable, which pins
-# cocotb==1.9.2 and cannot coexist with the above. Installed below instead.
+# --no-vicoco: course staff say vicoco is not needed for now, and it cannot
+# be installed as documented anyway -- its @stable pins cocotb==1.9.2, which
+# cannot coexist with the above. `lab-bc simulate` does not need a local copy
+# either: the server runs its own vicoco against its own cocotb. Nothing here
+# should install it until the course asks for it.
 RUN HOME=/root VENV_DIR="$VENV_6205" COCOTB_VERSION=2.1.0 \
   /tmp/install_6205.sh --no-gui --no-shell-rc --skip-selftest --no-vicoco && \
   rm /tmp/install_6205.sh
-
-# The course documents `pip install git+...@stable`, but stable still pins
-# cocotb==1.9.2, so following it verbatim either fails or drags cocotb back
-# to a version where the documented cocotb_tools.runner import does not
-# exist. upgrade_cocotb_2_0 requires >=2.0.0 and is the only branch that
-# works against the cocotb the course's own boilerplate needs. Pinned to a
-# commit rather than the branch name, since it is unmerged and moving.
-# Revert to @stable once upstream merges it.
-ARG VICOCO_REV=82018a4297bd764be5ab82e1d7e968a8c6738dc7
-RUN /opt/6205_python/bin/pip install --no-cache-dir \
-  "git+https://github.com/kiran-vuksanaj/vicoco.git@${VICOCO_REV}" && \
-  /opt/6205_python/bin/python3 -c "from vicoco.vivado_runner import get_runner"
 
 # The udev rule is useless inside the container (the kernel is the host's),
 # but dev106 --group-adds the host GID that owns the device node, so the
