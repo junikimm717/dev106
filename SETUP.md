@@ -123,9 +123,11 @@ a simulator; iverilog is unaffected. If you need it:
 
 ```bash
 sudo pip install 'cocotb==1.9.2' git+https://github.com/kiran-vuksanaj/vicoco.git@stable
-``` They live in a venv at `/opt/6205_python`, which
-is owned by root so that starting a container does not mean chowning every
-file in it. Adding a package therefore needs sudo, which you have:
+```
+
+All of it lives in a venv at `/opt/6205_python`, owned by root so that
+starting a container does not mean chowning every file in it. Adding a
+package therefore needs sudo, which you have:
 
 ```bash
 sudo pip install <package>
