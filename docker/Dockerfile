@@ -290,8 +290,19 @@ COPY docker/install_6205.sh /tmp/install_6205.sh
 # --no-gui: no X server here. --no-shell-rc: the alias is written below into
 # the student's profile instead of root's. --skip-selftest: the smoke test
 # wants a writable HOME, which does not exist until bootstrap runs.
-RUN HOME=/root VENV_DIR="$VENV_6205" \
-  /tmp/install_6205.sh --no-gui --no-shell-rc --skip-selftest && \
+#
+# COCOTB_VERSION: the course docs say plain `pip3 install cocotb`, so a
+# student following them gets 2.x, where the runner moved to
+# cocotb_tools.runner. The installer defaults to 1.9.2, which leaves
+# `from cocotb_tools.runner import get_runner` failing. Pinned rather than
+# left floating so the image is reproducible.
+#
+# --no-vicoco: vicoco pins cocotb==1.9.2 on its released branches, so it
+# cannot coexist with the above. Its upgrade_cocotb_2_0 branch requires
+# >=2.0.0 but is unmerged. vicoco only adds Vivado xsim as a simulator;
+# iverilog, which the course uses, is unaffected.
+RUN HOME=/root VENV_DIR="$VENV_6205" COCOTB_VERSION=2.1.0 \
+  /tmp/install_6205.sh --no-gui --no-shell-rc --skip-selftest --no-vicoco && \
   rm /tmp/install_6205.sh
 
 # The udev rule is useless inside the container (the kernel is the host's),

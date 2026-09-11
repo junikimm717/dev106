@@ -104,8 +104,26 @@ and a clangd preconfigured with the xv6 compile flags.
 **6.106** is amd64-only; keep `follow_host = false` so it runs under emulation
 on Apple Silicon.
 
-**6.205** ships Icarus Verilog 12, cocotb, pyserial, openFPGALoader, vicoco,
-and `lab-bc`, all on `PATH`. They live in a venv at `/opt/6205_python`, which
+**6.205** ships Icarus Verilog 12, cocotb 2.x, pyserial, openFPGALoader, and
+`lab-bc`, all on `PATH`. cocotb is 2.x because the course docs say plain
+`pip3 install cocotb`, so that is what a student following them gets. Two
+consequences:
+
+- The runner is `from cocotb_tools.runner import get_runner`. The 1.x spelling
+  `from cocotb.runner import ...` does not exist in 2.x.
+- 2.x will not infer a timescale. A module with no `` `timescale `` directive
+  fails with *"Unable to accurately represent 10(ns) with the simulator
+  precision of 1e0"*. Put `` `timescale 1ns / 1ps `` at the top of your
+  sources.
+
+vicoco is **not** installed: it pins `cocotb==1.9.2` on every released branch,
+so it cannot coexist with 2.x. Its `upgrade_cocotb_2_0` branch requires
+`>=2.0.0` but is unmerged as of this writing. vicoco only adds Vivado xsim as
+a simulator; iverilog is unaffected. If you need it:
+
+```bash
+sudo pip install 'cocotb==1.9.2' git+https://github.com/kiran-vuksanaj/vicoco.git@stable
+``` They live in a venv at `/opt/6205_python`, which
 is owned by root so that starting a container does not mean chowning every
 file in it. Adding a package therefore needs sudo, which you have:
 
