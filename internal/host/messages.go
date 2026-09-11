@@ -15,8 +15,29 @@ func usbAdvice(u USBDevices, wsl bool, platform string) string {
 		return unavailableAdvice(u, platform)
 	}
 
-	// We cannot see the VM's devices, so this is a pointer, not a diagnosis.
 	if u.Mode == USBSharedVM {
+		// orb answered: the board is attached and the container can open it.
+		if u.AttachKnown && u.BoardAttached {
+			return ""
+		}
+
+		if u.BoardDetached() {
+			target := u.BoardID
+			if target == "" {
+				target = "<id>"
+			}
+			return fmt.Sprintf(`warning: the FPGA board (%s:%s) is not attached to OrbStack's VM,
+  so openFPGALoader cannot see it.
+
+  Attach it:
+      orb usb attach %s
+
+  Simulation and `+"`lab-bc build`"+` work without it.
+
+`, fpgaVendorID, fpgaProductID, target)
+		}
+
+		// orb did not answer, so this is a pointer, not a diagnosis.
 		return `note: OrbStack passes USB through, but the board has to be attached first.
 
   Check that it is, and attach it if not:
