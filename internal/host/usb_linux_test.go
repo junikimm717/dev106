@@ -89,14 +89,59 @@ func currentGID(t *testing.T) int {
 	return syscall.Getgid()
 }
 
+// A board from the default list, so these tests stay meaningful if the
+// default changes.
+var (
+	boardVendor  = DefaultUSBIDs[0].Vendor
+	boardProduct = DefaultUSBIDs[0].Product
+)
+
+// Digilent HS2/HS3 and JTAG-SMT2 are 0403:6014. Pinning a single ID reported
+// them missing on Linux exactly as it did on OrbStack.
+func TestDetectUSBFindsNonDefaultProgrammer(t *testing.T) {
+	h := newFakeHost(t)
+	want := h.addUSBDevice(t, "1-4", "0403", "6014", 1, 9)
+
+	got := DetectUSB(USBHostDevices, DaemonIdentity{OperatingSystem: "Ubuntu 24.04.1 LTS"}, nil)
+
+	if got.BoardNode != want {
+		t.Fatalf("BoardNode = %q, want %q (an FT232H is a programmer too)", got.BoardNode, want)
+	}
+}
+
+// A programmer nobody anticipated works once usb_ids names it.
+func TestDetectUSBHonoursConfiguredIDs(t *testing.T) {
+	h := newFakeHost(t)
+	want := h.addUSBDevice(t, "1-5", "1d50", "6018", 1, 11)
+
+	got := DetectUSB(USBHostDevices, DaemonIdentity{OperatingSystem: "Ubuntu 24.04.1 LTS"},
+		[]USBID{{"1d50", "6018"}})
+
+	if got.BoardNode != want {
+		t.Fatalf("BoardNode = %q, want %q", got.BoardNode, want)
+	}
+}
+
+// A plain USB-serial adapter must not be mistaken for a board.
+func TestDetectUSBIgnoresUartOnlyFTDI(t *testing.T) {
+	h := newFakeHost(t)
+	h.addUSBDevice(t, "1-6", "0403", "6001", 1, 13)
+
+	got := DetectUSB(USBHostDevices, DaemonIdentity{OperatingSystem: "Ubuntu 24.04.1 LTS"}, nil)
+
+	if got.BoardFound() {
+		t.Fatalf("an FT232RL is not an FPGA board: %q", got.BoardNode)
+	}
+}
+
 func TestDetectUSBFindsBoard(t *testing.T) {
 	h := newFakeHost(t)
-	// Only the FT2232H should match.
+	// Only the programmer should match.
 	h.addUSBDevice(t, "usb1", "1d6b", "0002", 1, 1)
 	h.addUSBDevice(t, "1-2", "046d", "c52b", 1, 4)
-	want := h.addUSBDevice(t, "1-3", fpgaVendorID, fpgaProductID, 1, 7)
+	want := h.addUSBDevice(t, "1-3", boardVendor, boardProduct, 1, 7)
 
-	got := DetectUSB(USBHostDevices, DaemonIdentity{OperatingSystem: "Ubuntu 24.04.1 LTS"})
+	got := DetectUSB(USBHostDevices, DaemonIdentity{OperatingSystem: "Ubuntu 24.04.1 LTS"}, nil)
 
 	if !got.Supported || !got.BusDir || !got.Enumerable() {
 		t.Fatalf("linux host should support passthrough: %+v", got)
@@ -115,9 +160,9 @@ func TestDetectUSBFindsBoard(t *testing.T) {
 // Zero padded in /dev but not in sysfs, so string concat would miss the node.
 func TestDetectUSBPadsBusAndDeviceNumbers(t *testing.T) {
 	h := newFakeHost(t)
-	want := h.addUSBDevice(t, "3-1", fpgaVendorID, fpgaProductID, 3, 12)
+	want := h.addUSBDevice(t, "3-1", boardVendor, boardProduct, 3, 12)
 
-	got := DetectUSB(USBHostDevices, DaemonIdentity{OperatingSystem: "Ubuntu 24.04.1 LTS"})
+	got := DetectUSB(USBHostDevices, DaemonIdentity{OperatingSystem: "Ubuntu 24.04.1 LTS"}, nil)
 	if got.BoardNode != want {
 		t.Fatalf("BoardNode = %q, want %q", got.BoardNode, want)
 	}
@@ -130,7 +175,7 @@ func TestDetectUSBNoBoardFallsBackToPlugdev(t *testing.T) {
 	h := newFakeHost(t)
 	h.addUSBDevice(t, "1-2", "046d", "c52b", 1, 4)
 
-	got := DetectUSB(USBHostDevices, DaemonIdentity{OperatingSystem: "Ubuntu 24.04.1 LTS"})
+	got := DetectUSB(USBHostDevices, DaemonIdentity{OperatingSystem: "Ubuntu 24.04.1 LTS"}, nil)
 
 	if got.BoardFound() {
 		t.Fatalf("no board should have matched: %+v", got)
@@ -145,12 +190,12 @@ func TestDetectUSBNoBoardFallsBackToPlugdev(t *testing.T) {
 
 func TestDetectUSBCollectsSerialNodes(t *testing.T) {
 	h := newFakeHost(t)
-	h.addUSBDevice(t, "1-3", fpgaVendorID, fpgaProductID, 1, 7)
+	h.addUSBDevice(t, "1-3", boardVendor, boardProduct, 1, 7)
 	usb0 := h.addSerial(t, "ttyUSB0")
 	acm0 := h.addSerial(t, "ttyACM0")
 	h.addSerial(t, "ttyS0") // a plain UART, not ours
 
-	got := DetectUSB(USBHostDevices, DaemonIdentity{OperatingSystem: "Ubuntu 24.04.1 LTS"})
+	got := DetectUSB(USBHostDevices, DaemonIdentity{OperatingSystem: "Ubuntu 24.04.1 LTS"}, nil)
 
 	if len(got.Serial) != 2 {
 		t.Fatalf("Serial = %v, want ttyUSB0 and ttyACM0", got.Serial)
@@ -168,9 +213,9 @@ func TestDetectUSBCollectsSerialNodes(t *testing.T) {
 // Adding gid 0 would be a privilege grant, not a convenience.
 func TestDetectUSBNeverAddsRootGroup(t *testing.T) {
 	h := newFakeHost(t)
-	h.addUSBDevice(t, "1-3", fpgaVendorID, fpgaProductID, 1, 7)
+	h.addUSBDevice(t, "1-3", boardVendor, boardProduct, 1, 7)
 
-	for _, gid := range DetectUSB(USBHostDevices, DaemonIdentity{OperatingSystem: "Ubuntu 24.04.1 LTS"}).GroupIDs {
+	for _, gid := range DetectUSB(USBHostDevices, DaemonIdentity{OperatingSystem: "Ubuntu 24.04.1 LTS"}, nil).GroupIDs {
 		if gid == "0" {
 			t.Fatal("gid 0 must never be added")
 		}
@@ -183,7 +228,7 @@ func TestDetectUSBMissingSysfsIsHarmless(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	got := DetectUSB(USBHostDevices, DaemonIdentity{OperatingSystem: "Ubuntu 24.04.1 LTS"})
+	got := DetectUSB(USBHostDevices, DaemonIdentity{OperatingSystem: "Ubuntu 24.04.1 LTS"}, nil)
 	if got.BoardFound() {
 		t.Fatal("no sysfs means no board")
 	}
