@@ -249,6 +249,14 @@ EOF
 RUN cd /nvim && make -j$(nproc)
 RUN /nvim/build/bin/setup-nvim
 
+# The nvim launcher points XDG_CONFIG_HOME at its own bundle
+RUN <<'EOF'
+set -eu
+grep -q 'XDG_CONFIG_HOME="$DIR/nvim/config"' /nvim/build/bin/nvim
+mkdir -p /nvim/build/nvim/config/clangd
+cp /home/dev106/.config/clangd/config.yaml /nvim/build/nvim/config/clangd/config.yaml
+EOF
+
 COPY ./home /home/dev106
 
 ENV DEV_CHOWN="/nvim"
