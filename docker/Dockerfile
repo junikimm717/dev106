@@ -118,7 +118,8 @@ RUN apt-get update && \
   qemu-system-riscv \
   gcc-riscv64-linux-gnu \
   binutils-riscv64-linux-gnu \
-  clangd \
+  clangd-22 \
+  clang-format-22 \
   bc \
   python3 && \
   rm -rf /var/lib/apt/lists/*
@@ -133,6 +134,26 @@ RUN ln -sfn python3 /usr/bin/python
 # of gdb-multiarch, which can. /usr/local/bin wins on PATH, and gdb-multiarch
 # still autodetects the native architecture, so nothing is lost.
 RUN ln -sf /usr/bin/gdb-multiarch /usr/local/bin/gdb
+
+# 6.1810's .clang-format uses clang-format 20+ syntax (ReflowComments as an
+# enum, BreakAfterReturnType). On 19 the whole file is rejected and clangd
+# falls back to LLVM style, which sorts includes -- and xv6 headers are
+# order-dependent (kernel/stat.h uses uint from kernel/types.h and does not
+# include it), so formatting a file reorders the includes and breaks the
+# build. Nothing reports this: a rejected .clang-format is a silent fallback.
+RUN ln -sf /usr/bin/clangd-22 /usr/local/bin/clangd && \
+  ln -sf /usr/bin/clang-format-22 /usr/local/bin/clang-format
+
+# Assert the course syntax parses and that include order actually survives,
+# rather than trusting the version number.
+RUN <<'EOF'
+set -eu
+cd /tmp
+printf 'ReflowComments: Never\nBreakAfterReturnType: TopLevelDefinitions\nSortIncludes: Never\n' > .clang-format
+printf '#include "b.h"\n#include "a.h"\n' > fmtcheck.c
+clang-format --style=file fmtcheck.c | head -1 | grep -q '"b.h"'
+rm .clang-format fmtcheck.c
+EOF
 
 # The same target writes a .gdbinit at the repo root carrying the per-user
 # port and `target remote`. gdb declines to auto-load it, leaving you in a
@@ -206,6 +227,12 @@ CompileFlags:
     - -nostdinc
     - -fno-stack-protector
     - -fno-pie
+# never sort. this breaks xv6.
+Completion:
+  HeaderInsertion: Never
+Diagnostics:
+  UnusedIncludes: None
+  MissingIncludes: None
 YAML
 EOF
 
