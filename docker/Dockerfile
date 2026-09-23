@@ -116,6 +116,7 @@ RUN apt-get update && \
   gdb-multiarch \
   qemu-system-misc \
   qemu-system-riscv \
+  ipxe-qemu \
   gcc-riscv64-linux-gnu \
   binutils-riscv64-linux-gnu \
   clangd-22 \
@@ -165,6 +166,17 @@ RUN qemu-system-riscv64 --version && \
   riscv64-linux-gnu-gcc --version && \
   gdb-multiarch --version && \
   clangd --version
+
+# Assert QEMU can actually build the net lab's NIC. A missing option ROM is a
+# startup error rather than a warning, so it takes the whole lab down at once,
+# and nothing else in this image exercises -device e1000.
+RUN <<'EOF'
+set -eu
+out=$(echo quit | qemu-system-riscv64 -machine virt -bios none -display none \
+  -monitor stdio -netdev user,id=n0 -device e1000,netdev=n0,bus=pcie.0 -S 2>&1)
+echo "$out"
+! echo "$out" | grep -qi romfile
+EOF
 
 # The two fixes above are the whole xv6 debugging path, so assert them rather
 # than trusting that a package upgrade left them alone.
