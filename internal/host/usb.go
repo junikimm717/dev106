@@ -186,8 +186,27 @@ func FormatUSBIDs(ids []USBID) string {
 // Whole USB major, so a replug does not need a new container.
 const USBCgroupRule = "c 189:* rmw"
 
+// Serial is a second major: /dev/bus/usb carries the raw device, which is all
+// openFPGALoader needs, but pyserial opens the ttyUSB node instead. Whole major
+// for the same reason as above -- the minor changes on replug.
+const SerialCgroupRule = "c 188:* rmw"
+
+// DialoutGID owns /dev/ttyUSB* (root:dialout 0660). The container user is built
+// from the host's uid/gid, so it lands in dialout only by accident -- on a host
+// whose gid happens to be 20. Granting it explicitly is what makes serial work
+// for everyone else. 20 is dialout on Debian, Ubuntu and Alpine alike, which
+// covers every base image we ship and the OrbStack VM.
+const DialoutGID = "20"
+
 // Overridden by tests to point at a fake device tree.
 var USBBusDir = "/dev/bus/usb"
+
+// DevDir is bind mounted whole on a shared-VM daemon. Mapping the ttyUSB nodes
+// individually cannot work there: they exist only while the board is attached,
+// so a container created before the board was plugged in has nothing to map,
+// and the minor changes on replug. The device cgroup, not the mount, is what
+// bounds this -- a node being visible does not make it openable.
+var DevDir = "/dev"
 
 // DaemonUSBMode is a property of the daemon, not of our GOOS: the devices a
 // container sees are the daemon's.
@@ -336,6 +355,10 @@ func DetectUSB(mode DaemonUSBMode, id DaemonIdentity, p DeviceProfile) USBDevice
 		// container user to open it. scanHostUSB drops gid 0 on purpose; there
 		// a udev rule is the right answer and this would be a needless grant.
 		u.GroupIDs = append(u.GroupIDs, "0")
+
+		// The ttyUSB nodes are root:dialout rather than root:root, so the grant
+		// above does not reach them.
+		u.GroupIDs = append(u.GroupIDs, DialoutGID)
 	}
 	return u
 }

@@ -87,6 +87,46 @@ func TestApplyUSBSharedVM(t *testing.T) {
 	}
 }
 
+// pyserial opens /dev/ttyUSB*, not the raw USB node openFPGALoader uses. The
+// bus bind and major 189 are not enough on their own, and each missing piece
+// fails the same way -- a permission error or a missing path at import time --
+// so assert all three rather than trusting one to imply the others.
+func TestApplyUSBSharedVMReachesSerial(t *testing.T) {
+	hc := &container.HostConfig{}
+	applyUSB(hc, host.Detect(host.DaemonIdentity{OperatingSystem: "OrbStack"}, host.FPGAProfile))
+
+	if !containsString(hc.Binds, host.DevDir+":"+host.DevDir) {
+		t.Fatalf("ttyUSB nodes appear only after attach, so /dev must be bound: %v", hc.Binds)
+	}
+	if !containsString(hc.DeviceCgroupRules, host.SerialCgroupRule) {
+		t.Fatalf("major 188 is not openable without a rule: %v", hc.DeviceCgroupRules)
+	}
+	if !containsString(hc.GroupAdd, host.DialoutGID) {
+		t.Fatalf("ttyUSB is root:dialout 0660, so the root grant does not cover it: %v", hc.GroupAdd)
+	}
+}
+
+// A Linux daemon shares our /dev, so the nodes are already there and mapping
+// them individually still works. Binding the host's whole /dev there would
+// widen what the container sees for no gain.
+func TestApplyUSBHostDevicesDoesNotBindDev(t *testing.T) {
+	hc := &container.HostConfig{}
+	applyUSB(hc, host.USBDevices{
+		Mode:      host.USBHostDevices,
+		Supported: true,
+		BusDir:    true,
+		Serial:    []string{"/dev/ttyUSB0"},
+		GroupIDs:  []string{"20"},
+	})
+
+	if containsString(hc.Binds, host.DevDir+":"+host.DevDir) {
+		t.Fatalf("host-devices daemon should not get the whole of /dev: %v", hc.Binds)
+	}
+	if !containsString(hc.DeviceCgroupRules, host.SerialCgroupRule) {
+		t.Fatalf("a replugged board gets a new minor, so the rule is still needed: %v", hc.DeviceCgroupRules)
+	}
+}
+
 // 6.106 and 6.181 never pass a device through, so USB config problems must
 // stay silent for them -- a warning about a key they do not use is noise.
 func TestUSBConfigWarningsOnlyWhenUSBIsOn(t *testing.T) {

@@ -105,10 +105,15 @@ func scanHostUSB(u *USBDevices) {
 		}
 	}
 
-	// Join plugdev anyway, so a board plugged in later is readable.
+	// Join plugdev anyway, so a board plugged in later is readable. dialout is
+	// the same bet for the ttyUSB node, which does not exist yet either. Looked
+	// up by name rather than assuming 20: that is Debian's number, and this is
+	// the one code path that runs on the user's own distro.
 	if !u.DeviceFound() {
-		if gid, ok := plugdevGID(); ok {
-			gids[gid] = true
+		for _, name := range []string{"plugdev", "dialout"} {
+			if gid, ok := groupGID(name); ok {
+				gids[gid] = true
+			}
 		}
 	}
 
@@ -120,14 +125,14 @@ func scanHostUSB(u *USBDevices) {
 	sort.Strings(u.GroupIDs)
 }
 
-func plugdevGID() (int, bool) {
+func groupGID(name string) (int, bool) {
 	b, err := os.ReadFile(groupFile)
 	if err != nil {
 		return 0, false
 	}
 	for _, line := range strings.Split(string(b), "\n") {
 		fields := strings.Split(line, ":")
-		if len(fields) < 3 || fields[0] != "plugdev" {
+		if len(fields) < 3 || fields[0] != name {
 			continue
 		}
 		gid, err := strconv.Atoi(fields[2])
