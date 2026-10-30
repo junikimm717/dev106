@@ -9,7 +9,7 @@
 #   * Icarus Verilog >= 12  distro package, or built from source if too old
 #   * openFPGALoader        built from a pinned upstream tag (as the course does)
 #   * USB access            upstream udev rules + plugdev group membership
-#   * Python venv           cocotb (course-pinned), pyserial, lab-bc, vicoco
+#   * Python venv           cocotb (course-pinned), pyserial, pillow, lab-bc, vicoco
 #   * GUI tools (optional)  gtkwave, pulseview
 #
 # Idempotent: every step inspects the current state first and only touches
@@ -488,6 +488,10 @@ step_python_env() {
   local reqs=()
   [[ $(dist_version cocotb) == "$COCOTB_VERSION" ]] || reqs+=("cocotb==$COCOTB_VERSION")
   [[ -n $(dist_version pyserial) ]] || reqs+=(pyserial)
+  # The labs ship util/img_to_mem.py, which turns an image into the .mem a
+  # BROM is initialised from. It imports PIL, so without Pillow the first
+  # graphics lab stops at generating its test data.
+  [[ -n $(dist_version pillow) ]] || reqs+=(pillow)
   if (( ${#reqs[@]} )); then
     retry 2 pip_q install "${reqs[@]}"
     ok "installed ${reqs[*]}"
@@ -500,12 +504,12 @@ step_python_env() {
   fi
 
   # Verify rather than trust pip's exit code.
-  "$VENV_DIR/bin/python" -c 'import cocotb, serial' \
-    || { err "cocotb/pyserial not importable in $VENV_DIR"; return 1; }
+  "$VENV_DIR/bin/python" -c 'import cocotb, serial, PIL' \
+    || { err "cocotb/pyserial/pillow not importable in $VENV_DIR"; return 1; }
   [[ -x $VENV_DIR/bin/lab-bc ]] || { err "lab-bc entry point missing from $VENV_DIR/bin"; return 1; }
 
   if (( changed )); then return 0; fi
-  unchanged "venv has cocotb $COCOTB_VERSION, pyserial, lab-bc"
+  unchanged "venv has cocotb $COCOTB_VERSION, pyserial, pillow, lab-bc"
 }
 
 step_vicoco() {
@@ -781,7 +785,7 @@ main() {
   run_step critical "Icarus Verilog >= $IVERILOG_MIN_MAJOR" step_iverilog
   run_step critical "openFPGALoader $OFL_VERSION"        step_openfpgaloader
   run_step optional "USB access (udev rule, plugdev)"    step_udev
-  run_step critical "Python venv: cocotb $COCOTB_VERSION, pyserial, lab-bc" step_python_env
+  run_step critical "Python venv: cocotb $COCOTB_VERSION, pyserial, pillow, lab-bc" step_python_env
 
   if (( WANT_VICOCO )); then run_step optional "vicoco" step_vicoco
   else SUMMARY+=("skipped  vicoco (--no-vicoco)"); fi

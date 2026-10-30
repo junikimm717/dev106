@@ -104,8 +104,8 @@ and a clangd preconfigured with the xv6 compile flags.
 **6.106** is amd64-only; keep `follow_host = false` so it runs under emulation
 on Apple Silicon.
 
-**6.205** ships Icarus Verilog 12, cocotb 2.x, pyserial, openFPGALoader, and
-`lab-bc`, all on `PATH`. cocotb is 2.x because the course docs say plain
+**6.205** ships Icarus Verilog 12, cocotb 2.x, pyserial, Pillow (the labs'
+`util/img_to_mem.py` needs it), openFPGALoader, and `lab-bc`, all on `PATH`. cocotb is 2.x because the course docs say plain
 `pip3 install cocotb`, so that is what a student following them gets. Two
 consequences:
 
